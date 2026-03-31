@@ -1,0 +1,27 @@
+[
+  {
+    "question": "How many active users are there?",
+    "expected_sql": "SELECT COUNT(*) FROM users WHERE is_active = 1",
+    "expected_tables": ["users"]
+  },
+  {
+    "question": "What is the total revenue for this month?",
+    "expected_sql": "SELECT SUM(amount) FROM transactions WHERE MONTH(created_at) = MONTH(CURRENT_DATE())",
+    "expected_tables": ["transactions"]
+  },
+  {
+    "question": "List the top 5 customers by purchase volume.",
+    "expected_sql": "SELECT customer_id, SUM(amount) as total FROM orders GROUP BY customer_id ORDER BY total DESC LIMIT 5",
+    "expected_tables": ["orders"]
+  },
+  {
+    "question": "Find all products that are out of stock.",
+    "expected_sql": "SELECT product_name FROM inventory WHERE stock_count = 0",
+    "expected_tables": ["inventory"]
+  },
+  {
+    "question": "Show the average delivery time for last week.",
+    "expected_sql": "SELECT AVG(delivery_days) FROM shipments WHERE created_at >= DATE_SUB(CURRENT_DATE(), INTERVAL 1 WEEK)",
+    "expected_tables": ["shipments"]
+  }
+]

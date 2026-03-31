@@ -1,0 +1,1293 @@
+[
+  {
+    "id": "Q001",
+    "difficulty": "easy",
+    "question": "How many total users do we have in the database?",
+    "expected_sql": "SELECT COUNT(*) FROM users",
+    "expected_data": [
+      [
+        "2000"
+      ]
+    ]
+  },
+  {
+    "id": "Q002",
+    "difficulty": "easy",
+    "question": "How many organizations are there in the SaaS industry?",
+    "expected_sql": "SELECT COUNT(*) FROM organizations WHERE industry = 'SaaS'",
+    "expected_data": [
+      [
+        "30"
+      ]
+    ]
+  },
+  {
+    "id": "Q003",
+    "difficulty": "easy",
+    "question": "How many active users are currently in the system?",
+    "expected_sql": "SELECT COUNT(*) FROM users WHERE is_active = true",
+    "expected_data": [
+      [
+        "1004"
+      ]
+    ]
+  },
+  {
+    "id": "Q004",
+    "difficulty": "easy",
+    "question": "What are the different roles available for users?",
+    "expected_sql": "SELECT DISTINCT role FROM users",
+    "expected_data": [
+      [
+        "admin"
+      ],
+      [
+        "member"
+      ]
+    ]
+  },
+  {
+    "id": "Q005",
+    "difficulty": "medium",
+    "question": "Which 5 organizations have the highest number of users?",
+    "expected_sql": "SELECT organizations.name FROM users JOIN organizations ON users.organization_id = organizations.id GROUP BY organizations.name ORDER BY COUNT(users.id) DESC LIMIT 5",
+    "expected_data": [
+      [
+        "Smith Ltd"
+      ],
+      [
+        "White Ltd"
+      ],
+      [
+        "Brown-Clark"
+      ],
+      [
+        "Williamson Group"
+      ],
+      [
+        "Reed, Hughes and Smith"
+      ]
+    ]
+  },
+  {
+    "id": "Q006",
+    "difficulty": "medium",
+    "question": "Show me the total invoice amount billed per subscription plan type.",
+    "expected_sql": "SELECT subscriptions.plan_type, SUM(invoices.amount) FROM invoices JOIN subscriptions ON invoices.subscription_id = subscriptions.id GROUP BY subscriptions.plan_type",
+    "expected_data": [
+      [
+        "pro",
+        "57349.84"
+      ],
+      [
+        "free",
+        "93659.66"
+      ],
+      [
+        "enterprise",
+        "6613.95"
+      ]
+    ]
+  },
+  {
+    "id": "Q007",
+    "difficulty": "medium",
+    "question": "Which 5 organizations have the highest number of open or pending support tickets?",
+    "expected_sql": "SELECT organizations.name, COUNT(support_tickets.id) FROM support_tickets JOIN organizations ON support_tickets.organization_id = organizations.id WHERE support_tickets.status != 'resolved' GROUP BY organizations.name ORDER BY COUNT(support_tickets.id) DESC LIMIT 5",
+    "expected_data": [
+      [
+        "Smith Ltd",
+        "7"
+      ],
+      [
+        "Alexander, Brown and Mills",
+        "6"
+      ],
+      [
+        "Edwards-Burgess",
+        "6"
+      ],
+      [
+        "Singleton-Greene",
+        "6"
+      ],
+      [
+        "Hall, Wright and Velazquez",
+        "6"
+      ]
+    ]
+  },
+  {
+    "id": "Q008",
+    "difficulty": "medium",
+    "question": "What is the average session duration for users in Canada?",
+    "expected_sql": "SELECT AVG(sessions.duration_seconds) FROM sessions JOIN users ON sessions.user_id = users.id WHERE users.country = 'Canada'",
+    "expected_data": [
+      [
+        "3610.8749206349206349"
+      ]
+    ]
+  },
+  {
+    "id": "Q009",
+    "difficulty": "hard",
+    "question": "What is the total number of users belonging to churned organizations?",
+    "expected_sql": "SELECT COUNT(users.id) FROM users JOIN organizations ON users.organization_id = organizations.id WHERE organizations.churned_at IS NOT NULL",
+    "expected_data": [
+      [
+        "196"
+      ]
+    ]
+  },
+  {
+    "id": "Q010",
+    "difficulty": "hard",
+    "question": "Which feature is the most frequently used across all 'pro' plan organizations?",
+    "expected_sql": "SELECT feature_usage.feature_name FROM feature_usage JOIN users ON feature_usage.user_id = users.id JOIN organizations ON users.organization_id = organizations.id WHERE organizations.plan_type = 'pro' GROUP BY feature_usage.feature_name ORDER BY SUM(feature_usage.usage_count) DESC LIMIT 1",
+    "expected_data": [
+      [
+        "team_collaboration"
+      ]
+    ]
+  },
+  {
+    "id": "Q011",
+    "difficulty": "hard",
+    "question": "What is the total revenue collected from invoices that have actually been paid?",
+    "expected_sql": "SELECT SUM(amount) FROM invoices WHERE paid_status = 'paid' AND paid_at IS NOT NULL",
+    "expected_data": [
+      [
+        "128682.42"
+      ]
+    ]
+  },
+  {
+    "id": "Q012",
+    "difficulty": "hard",
+    "question": "List the names of organizations that have never submitted a support ticket.",
+    "expected_sql": "SELECT name FROM organizations WHERE id NOT IN (SELECT organization_id FROM support_tickets)",
+    "expected_data": []
+  },
+  {
+    "id": "Q013",
+    "difficulty": "hard",
+    "question": "Identify the user email who performed the most audit log actions.",
+    "expected_sql": "SELECT users.email FROM audit_logs JOIN users ON audit_logs.performed_by = users.id GROUP BY users.email ORDER BY COUNT(audit_logs.id) DESC LIMIT 1",
+    "expected_data": [
+      [
+        "victoriamahoney@example.com"
+      ]
+    ]
+  },
+  {
+    "id": "Q014",
+    "difficulty": "hard",
+    "question": "Get the top 3 device types used for the 'logout' event.",
+    "expected_sql": "SELECT device_type FROM events WHERE event_name = 'logout' GROUP BY device_type ORDER BY COUNT(id) DESC LIMIT 3",
+    "expected_data": [
+      [
+        "tablet"
+      ],
+      [
+        "web"
+      ],
+      [
+        "mobile"
+      ]
+    ]
+  },
+  {
+    "id": "Q015",
+    "difficulty": "edge_case",
+    "question": "How many users are currently assigned to the 'dark_mode_test' experiment?",
+    "expected_sql": "SELECT COUNT(experiment_assignments.user_id) FROM experiment_assignments JOIN experiments ON experiment_assignments.experiment_id = experiments.id WHERE experiments.experiment_name = 'dark_mode_test'",
+    "expected_data": [
+      [
+        "100"
+      ]
+    ]
+  },
+  {
+    "id": "Q016",
+    "difficulty": "edge_case",
+    "question": "What is the organization_id for the company named 'Rivera-Franco'?",
+    "expected_sql": "SELECT id FROM organizations WHERE name = 'Rivera-Franco'",
+    "expected_data": []
+  },
+  {
+    "id": "Q017",
+    "difficulty": "edge_case",
+    "question": "Count the users. Just the number.",
+    "expected_sql": "SELECT COUNT(*) FROM users",
+    "expected_data": [
+      [
+        "2000"
+      ]
+    ]
+  },
+  {
+    "id": "Q018",
+    "difficulty": "edge_case",
+    "question": "Are there any admins in India?",
+    "expected_sql": "SELECT COUNT(*) > 0 FROM users WHERE role = 'admin' AND country = 'India'",
+    "expected_data": [
+      [
+        "True"
+      ]
+    ]
+  },
+  {
+    "id": "Q019",
+    "difficulty": "edge_case",
+    "question": "Show me the IDs of invoices where the amount is greater than 1000.",
+    "expected_sql": "SELECT id FROM invoices WHERE amount > 1000",
+    "expected_data": []
+  },
+  {
+    "id": "Q020",
+    "difficulty": "edge_case",
+    "question": "How many users signed up but have a null last_active_at date?",
+    "expected_sql": "SELECT COUNT(*) FROM users WHERE last_active_at IS NULL",
+    "expected_data": [
+      [
+        "186"
+      ]
+    ]
+  },
+  {
+    "id": "Q021",
+    "difficulty": "easy",
+    "question": "List all feature flags currently enabled for the 'pro' plan.",
+    "expected_sql": "SELECT feature_name FROM feature_flags WHERE enabled_for_plan = 'pro'",
+    "expected_data": [
+      [
+        "report_builder"
+      ]
+    ]
+  },
+  {
+    "id": "Q022",
+    "difficulty": "easy",
+    "question": "How many experiments are currently running and haven't ended yet?",
+    "expected_sql": "SELECT COUNT(*) FROM experiments WHERE ended_at IS NULL",
+    "expected_data": [
+      [
+        "1"
+      ]
+    ]
+  },
+  {
+    "id": "Q023",
+    "difficulty": "easy",
+    "question": "What is the most common device type used for events?",
+    "expected_sql": "SELECT device_type FROM events GROUP BY device_type ORDER BY COUNT(*) DESC LIMIT 1",
+    "expected_data": [
+      [
+        "tablet"
+      ]
+    ]
+  },
+  {
+    "id": "Q024",
+    "difficulty": "easy",
+    "question": "Give me a list of all the unique industries our organizations belong to.",
+    "expected_sql": "SELECT DISTINCT industry FROM organizations WHERE industry IS NOT NULL",
+    "expected_data": [
+      [
+        "Finance"
+      ],
+      [
+        "Retail"
+      ],
+      [
+        "SaaS"
+      ],
+      [
+        "Healthcare"
+      ]
+    ]
+  },
+  {
+    "id": "Q025",
+    "difficulty": "medium",
+    "question": "What is the total sum of feature usage counts across the entire system?",
+    "expected_sql": "SELECT SUM(usage_count) FROM feature_usage",
+    "expected_data": [
+      [
+        "149636"
+      ]
+    ]
+  },
+  {
+    "id": "Q026",
+    "difficulty": "medium",
+    "question": "Which 3 users have the highest total session duration?",
+    "expected_sql": "SELECT users.email FROM sessions JOIN users ON sessions.user_id = users.id GROUP BY users.email ORDER BY SUM(sessions.duration_seconds) DESC LIMIT 3",
+    "expected_data": [
+      [
+        "jerry75@example.com"
+      ],
+      [
+        "donnacook@example.net"
+      ],
+      [
+        "tiffanyboone@example.org"
+      ]
+    ]
+  },
+  {
+    "id": "Q027",
+    "difficulty": "medium",
+    "question": "How many users are assigned to each experiment variant?",
+    "expected_sql": "SELECT experiments.variant, COUNT(experiment_assignments.user_id) FROM experiment_assignments JOIN experiments ON experiment_assignments.experiment_id = experiments.id GROUP BY experiments.variant",
+    "expected_data": [
+      [
+        "variant_a",
+        "300"
+      ]
+    ]
+  },
+  {
+    "id": "Q028",
+    "difficulty": "medium",
+    "question": "What is the total subscription amount billed per billing cycle type (e.g., monthly vs annual)?",
+    "expected_sql": "SELECT billing_cycle, SUM(amount) FROM subscriptions GROUP BY billing_cycle",
+    "expected_data": [
+      [
+        "monthly",
+        "28749.68"
+      ],
+      [
+        "yearly",
+        "25207.22"
+      ]
+    ]
+  },
+  {
+    "id": "Q029",
+    "difficulty": "hard",
+    "question": "Which organization has generated the highest number of raw events?",
+    "expected_sql": "SELECT organizations.name FROM events JOIN users ON events.user_id = users.id JOIN organizations ON users.organization_id = organizations.id GROUP BY organizations.name ORDER BY COUNT(events.id) DESC LIMIT 1",
+    "expected_data": [
+      [
+        "Smith Ltd"
+      ]
+    ]
+  },
+  {
+    "id": "Q030",
+    "difficulty": "hard",
+    "question": "Find the average resolution time for support tickets per priority level.",
+    "expected_sql": "SELECT priority, AVG(resolved_at - created_at) FROM support_tickets WHERE resolved_at IS NOT NULL GROUP BY priority",
+    "expected_data": [
+      [
+        "medium",
+        "1 day, 12:59:13.846154"
+      ],
+      [
+        "high",
+        "1 day, 12:29:38.313253"
+      ],
+      [
+        "low",
+        "1 day, 11:36:57.721519"
+      ]
+    ]
+  },
+  {
+    "id": "Q031",
+    "difficulty": "hard",
+    "question": "Which 3 users have used the 'report_builder' feature the most?",
+    "expected_sql": "SELECT users.email FROM feature_usage JOIN users ON feature_usage.user_id = users.id WHERE feature_usage.feature_name = 'report_builder' ORDER BY feature_usage.usage_count DESC LIMIT 3",
+    "expected_data": [
+      [
+        "marymoreno@example.com"
+      ],
+      [
+        "oarmstrong@example.net"
+      ],
+      [
+        "jessica56@example.com"
+      ]
+    ]
+  },
+  {
+    "id": "Q032",
+    "difficulty": "hard",
+    "question": "How many organizations churned in the year 2024?",
+    "expected_sql": "SELECT COUNT(*) FROM organizations WHERE EXTRACT(YEAR FROM churned_at) = 2024",
+    "expected_data": [
+      [
+        "0"
+      ]
+    ]
+  },
+  {
+    "id": "Q033",
+    "difficulty": "hard",
+    "question": "What is the total revenue collected from invoices for organizations in the 'Retail' industry?",
+    "expected_sql": "SELECT SUM(invoices.amount) FROM invoices JOIN subscriptions ON invoices.subscription_id = subscriptions.id JOIN organizations ON subscriptions.organization_id = organizations.id WHERE organizations.industry = 'Retail' AND invoices.paid_status = 'paid'",
+    "expected_data": [
+      [
+        "32085.30"
+      ]
+    ]
+  },
+  {
+    "id": "Q034",
+    "difficulty": "hard",
+    "question": "Which user email has logged the highest number of 'delete_project' events?",
+    "expected_sql": "SELECT users.email FROM events JOIN users ON events.user_id = users.id WHERE events.event_name = 'delete_project' GROUP BY users.email ORDER BY COUNT(events.id) DESC LIMIT 1",
+    "expected_data": [
+      [
+        "ksmith@example.com"
+      ]
+    ]
+  },
+  {
+    "id": "Q035",
+    "difficulty": "edge_case",
+    "question": "Give me the raw subscription_id associated with the highest single invoice amount.",
+    "expected_sql": "SELECT subscription_id FROM invoices ORDER BY amount DESC LIMIT 1",
+    "expected_data": [
+      [
+        "dc176f59-d8b4-423e-9732-25bd8fe53bff"
+      ]
+    ]
+  },
+  {
+    "id": "Q036",
+    "difficulty": "edge_case",
+    "question": "Return the exact JSONB event_properties for the event with ID '1afb144f-f20c-455f-8a29-1553f39d89d5'.",
+    "expected_sql": "SELECT event_properties FROM events WHERE id = '1afb144f-f20c-455f-8a29-1553f39d89d5'",
+    "expected_data": []
+  },
+  {
+    "id": "Q037",
+    "difficulty": "edge_case",
+    "question": "Show me the user_ids of admins who have never logged a single event.",
+    "expected_sql": "SELECT users.id FROM users LEFT JOIN events ON users.id = events.user_id WHERE users.role = 'admin' AND events.id IS NULL",
+    "expected_data": []
+  },
+  {
+    "id": "Q038",
+    "difficulty": "edge_case",
+    "question": "What is the total duration of all sessions combined, in seconds?",
+    "expected_sql": "SELECT SUM(duration_seconds) FROM sessions",
+    "expected_data": [
+      [
+        "36276066"
+      ]
+    ]
+  },
+  {
+    "id": "Q039",
+    "difficulty": "edge_case",
+    "question": "Are there any feature flags with a rollout percentage of exactly 100?",
+    "expected_sql": "SELECT COUNT(*) > 0 FROM feature_flags WHERE rollout_percentage = 100",
+    "expected_data": [
+      [
+        "True"
+      ]
+    ]
+  },
+  {
+    "id": "Q040",
+    "difficulty": "edge_case",
+    "question": "I need the exact timestamps of all actions performed by user 'bf89e9b4-f656-47fc-8551-f2e0610117ec' in the audit logs.",
+    "expected_sql": "SELECT created_at FROM audit_logs WHERE performed_by = 'bf89e9b4-f656-47fc-8551-f2e0610117ec'",
+    "expected_data": []
+  },
+  {
+    "id": "Q041",
+    "difficulty": "easy",
+    "question": "How many users signed up in the year 2025?",
+    "expected_sql": "SELECT COUNT(*) FROM users WHERE EXTRACT(YEAR FROM signup_date) = 2025",
+    "expected_data": [
+      [
+        "1015"
+      ]
+    ]
+  },
+  {
+    "id": "Q042",
+    "difficulty": "easy",
+    "question": "How many users have an email ending with '@example.org'?",
+    "expected_sql": "SELECT COUNT(*) FROM users WHERE email LIKE '%@example.org'",
+    "expected_data": [
+      [
+        "656"
+      ]
+    ]
+  },
+  {
+    "id": "Q043",
+    "difficulty": "easy",
+    "question": "What is the combined count of organizations on either the 'pro' or 'enterprise' plan?",
+    "expected_sql": "SELECT COUNT(*) FROM organizations WHERE plan_type IN ('pro', 'enterprise')",
+    "expected_data": [
+      [
+        "41"
+      ]
+    ]
+  },
+  {
+    "id": "Q044",
+    "difficulty": "easy",
+    "question": "How many audit logs were created by the action type 'delete_user'?",
+    "expected_sql": "SELECT COUNT(*) FROM audit_logs WHERE action_type = 'delete_user'",
+    "expected_data": [
+      [
+        "163"
+      ]
+    ]
+  },
+  {
+    "id": "Q045",
+    "difficulty": "medium",
+    "question": "Which feature has the highest average usage count per user?",
+    "expected_sql": "SELECT feature_name FROM feature_usage GROUP BY feature_name ORDER BY AVG(usage_count) DESC LIMIT 1",
+    "expected_data": [
+      [
+        "team_collaboration"
+      ]
+    ]
+  },
+  {
+    "id": "Q046",
+    "difficulty": "medium",
+    "question": "What is the total duration of sessions for users in the 'Retail' industry?",
+    "expected_sql": "SELECT SUM(sessions.duration_seconds) FROM sessions JOIN users ON sessions.user_id = users.id JOIN organizations ON users.organization_id = organizations.id WHERE organizations.industry = 'Retail'",
+    "expected_data": [
+      [
+        "10668992"
+      ]
+    ]
+  },
+  {
+    "id": "Q047",
+    "difficulty": "medium",
+    "question": "How many support tickets were created by 'pro' plan organizations in 2024?",
+    "expected_sql": "SELECT COUNT(support_tickets.id) FROM support_tickets JOIN organizations ON support_tickets.organization_id = organizations.id WHERE organizations.plan_type = 'pro' AND EXTRACT(YEAR FROM support_tickets.created_at) = 2024",
+    "expected_data": [
+      [
+        "0"
+      ]
+    ]
+  },
+  {
+    "id": "Q048",
+    "difficulty": "medium",
+    "question": "Which organizations currently have more than 5 active subscriptions?",
+    "expected_sql": "SELECT organizations.name FROM subscriptions JOIN organizations ON subscriptions.organization_id = organizations.id WHERE subscriptions.status = 'active' GROUP BY organizations.name HAVING COUNT(subscriptions.id) > 5",
+    "expected_data": []
+  },
+  {
+    "id": "Q049",
+    "difficulty": "hard",
+    "question": "Find the email of the user who logged the very first event in the system.",
+    "expected_sql": "SELECT users.email FROM events JOIN users ON events.user_id = users.id ORDER BY events.event_timestamp ASC LIMIT 1",
+    "expected_data": [
+      [
+        "mcgeelindsay@example.org"
+      ]
+    ]
+  },
+  {
+    "id": "Q050",
+    "difficulty": "hard",
+    "question": "Which 5 users have the highest total amount of unpaid invoices associated with their organization?",
+    "expected_sql": "SELECT users.email FROM users JOIN organizations ON users.organization_id = organizations.id JOIN subscriptions ON organizations.id = subscriptions.organization_id JOIN invoices ON subscriptions.id = invoices.subscription_id WHERE invoices.paid_status != 'paid' GROUP BY users.email ORDER BY SUM(invoices.amount) DESC LIMIT 5",
+    "expected_data": [
+      [
+        "qgutierrez@example.com"
+      ],
+      [
+        "heather96@example.com"
+      ],
+      [
+        "daniel99@example.com"
+      ],
+      [
+        "theodore14@example.net"
+      ],
+      [
+        "vhicks@example.org"
+      ]
+    ]
+  },
+  {
+    "id": "Q051",
+    "difficulty": "hard",
+    "question": "What is the average number of events per user across the entire platform?",
+    "expected_sql": "SELECT AVG(event_count) FROM (SELECT user_id, COUNT(id) AS event_count FROM events GROUP BY user_id) AS user_event_counts",
+    "expected_data": [
+      [
+        "10.0000000000000000"
+      ]
+    ]
+  },
+  {
+    "id": "Q052",
+    "difficulty": "hard",
+    "question": "Which organizations have an active subscription but zero active users?",
+    "expected_sql": "SELECT organizations.name FROM organizations JOIN subscriptions ON organizations.id = subscriptions.organization_id WHERE subscriptions.status = 'active' AND organizations.id NOT IN (SELECT organization_id FROM users WHERE is_active = true)",
+    "expected_data": []
+  },
+  {
+    "id": "Q053",
+    "difficulty": "hard",
+    "question": "How many distinct organizations have users who triggered an event where the JSON property 'feature' equals 'analytics_dashboard'?",
+    "expected_sql": "SELECT COUNT(DISTINCT organizations.id) FROM events JOIN users ON events.user_id = users.id JOIN organizations ON users.organization_id = organizations.id WHERE events.event_properties->>'feature' = 'analytics_dashboard'",
+    "expected_data": [
+      [
+        "100"
+      ]
+    ]
+  },
+  {
+    "id": "Q054",
+    "difficulty": "hard",
+    "question": "What is the total revenue collected in February 2025?",
+    "expected_sql": "SELECT SUM(amount) FROM invoices WHERE paid_status = 'paid' AND EXTRACT(MONTH FROM paid_at) = 2 AND EXTRACT(YEAR FROM paid_at) = 2025",
+    "expected_data": [
+      [
+        null
+      ]
+    ]
+  },
+  {
+    "id": "Q055",
+    "difficulty": "edge_case",
+    "question": "Give me the raw organization_id for the subscription with the latest end_date.",
+    "expected_sql": "SELECT organization_id FROM subscriptions ORDER BY end_date DESC LIMIT 1",
+    "expected_data": [
+      [
+        "00ba548d-8fc4-4880-941d-64ed23c8e252"
+      ]
+    ]
+  },
+  {
+    "id": "Q056",
+    "difficulty": "edge_case",
+    "question": "Are there any users in the database who do not belong to an organization?",
+    "expected_sql": "SELECT COUNT(*) FROM users WHERE organization_id IS NULL",
+    "expected_data": [
+      [
+        "0"
+      ]
+    ]
+  },
+  {
+    "id": "Q057",
+    "difficulty": "edge_case",
+    "question": "How many users are NOT from Canada, including those with no country listed?",
+    "expected_sql": "SELECT COUNT(*) FROM users WHERE country != 'Canada' OR country IS NULL",
+    "expected_data": [
+      [
+        "1689"
+      ]
+    ]
+  },
+  {
+    "id": "Q058",
+    "difficulty": "edge_case",
+    "question": "What is the total number of support tickets where the priority is exactly 'high'?",
+    "expected_sql": "SELECT COUNT(*) FROM support_tickets WHERE priority = 'high'",
+    "expected_data": [
+      [
+        "355"
+      ]
+    ]
+  },
+  {
+    "id": "Q059",
+    "difficulty": "edge_case",
+    "question": "What is the maximum usage count for the feature 'non_existent_feature'?",
+    "expected_sql": "SELECT MAX(usage_count) FROM feature_usage WHERE feature_name = 'non_existent_feature'",
+    "expected_data": [
+      [
+        null
+      ]
+    ]
+  },
+  {
+    "id": "Q060",
+    "difficulty": "edge_case",
+    "question": "Return the raw user_id for the user who was most recently active.",
+    "expected_sql": "SELECT id FROM users ORDER BY last_active_at DESC NULLS LAST LIMIT 1",
+    "expected_data": [
+      [
+        "e3604427-6fdf-47b0-a0ca-60c49bf73832"
+      ]
+    ]
+  },
+  {
+    "id": "Q061",
+    "difficulty": "easy",
+    "question": "What is the average invoice amount across all invoices?",
+    "expected_sql": "SELECT AVG(amount) FROM invoices",
+    "expected_data": [
+      [
+        "536.1341836734693878"
+      ]
+    ]
+  },
+  {
+    "id": "Q062",
+    "difficulty": "easy",
+    "question": "What is the total duration of all sessions in minutes?",
+    "expected_sql": "SELECT SUM(duration_seconds) / 60.0 FROM sessions",
+    "expected_data": [
+      [
+        "604601.100000000000"
+      ]
+    ]
+  },
+  {
+    "id": "Q063",
+    "difficulty": "easy",
+    "question": "How many invoices were issued in the year 2025?",
+    "expected_sql": "SELECT COUNT(*) FROM invoices WHERE EXTRACT(YEAR FROM issued_at) = 2025",
+    "expected_data": [
+      [
+        "240"
+      ]
+    ]
+  },
+  {
+    "id": "Q064",
+    "difficulty": "easy",
+    "question": "List all the distinct event names that have been logged.",
+    "expected_sql": "SELECT DISTINCT event_name FROM events",
+    "expected_data": [
+      [
+        "create_project"
+      ],
+      [
+        "dashboard_view"
+      ],
+      [
+        "delete_project"
+      ],
+      [
+        "file_upload"
+      ],
+      [
+        "invite_user"
+      ],
+      [
+        "login"
+      ],
+      [
+        "logout"
+      ],
+      [
+        "report_download"
+      ]
+    ]
+  },
+  {
+    "id": "Q065",
+    "difficulty": "medium",
+    "question": "What is the average number of days it takes to resolve a support ticket?",
+    "expected_sql": "SELECT AVG(EXTRACT(EPOCH FROM (resolved_at - created_at)) / 86400) FROM support_tickets WHERE resolved_at IS NOT NULL",
+    "expected_data": [
+      [
+        "1.51521990740740740704"
+      ]
+    ]
+  },
+  {
+    "id": "Q066",
+    "difficulty": "medium",
+    "question": "What are the top 5 organizations ranked by their total active subscription amount, from highest to lowest?",
+    "expected_sql": "SELECT organizations.name, SUM(subscriptions.amount) FROM subscriptions JOIN organizations ON subscriptions.organization_id = organizations.id WHERE subscriptions.status = 'active' GROUP BY organizations.name ORDER BY SUM(subscriptions.amount) DESC LIMIT 5",
+    "expected_data": [
+      [
+        "Valdez and Sons",
+        "997.68"
+      ],
+      [
+        "Reese Inc",
+        "983.31"
+      ],
+      [
+        "Hogan, Brown and Bryant",
+        "934.56"
+      ],
+      [
+        "Forbes Inc",
+        "905.31"
+      ],
+      [
+        "Montgomery Ltd",
+        "891.84"
+      ]
+    ]
+  },
+  {
+    "id": "Q067",
+    "difficulty": "medium",
+    "question": "How many users signed up during each month of the year 2024?",
+    "expected_sql": "SELECT EXTRACT(MONTH FROM signup_date), COUNT(*) FROM users WHERE EXTRACT(YEAR FROM signup_date) = 2024 GROUP BY EXTRACT(MONTH FROM signup_date)",
+    "expected_data": [
+      [
+        "3",
+        "64"
+      ],
+      [
+        "4",
+        "96"
+      ],
+      [
+        "5",
+        "82"
+      ],
+      [
+        "6",
+        "84"
+      ],
+      [
+        "7",
+        "76"
+      ],
+      [
+        "8",
+        "82"
+      ],
+      [
+        "9",
+        "82"
+      ],
+      [
+        "10",
+        "87"
+      ],
+      [
+        "11",
+        "78"
+      ],
+      [
+        "12",
+        "84"
+      ]
+    ]
+  },
+  {
+    "id": "Q068",
+    "difficulty": "medium",
+    "question": "Show me the count of active users compared to inactive users.",
+    "expected_sql": "SELECT is_active, COUNT(*) FROM users GROUP BY is_active",
+    "expected_data": [
+      [
+        "False",
+        "996"
+      ],
+      [
+        "True",
+        "1004"
+      ]
+    ]
+  },
+  {
+    "id": "Q069",
+    "difficulty": "hard",
+    "question": "Find the name of the organization that has the highest average invoice amount.",
+    "expected_sql": "SELECT organizations.name FROM invoices JOIN subscriptions ON invoices.subscription_id = subscriptions.id JOIN organizations ON subscriptions.organization_id = organizations.id GROUP BY organizations.name ORDER BY AVG(invoices.amount) DESC LIMIT 1",
+    "expected_data": [
+      [
+        "Valdez and Sons"
+      ]
+    ]
+  },
+  {
+    "id": "Q070",
+    "difficulty": "hard",
+    "question": "Identify the email of the second most active user based on total session duration.",
+    "expected_sql": "SELECT users.email FROM sessions JOIN users ON sessions.user_id = users.id GROUP BY users.email ORDER BY SUM(sessions.duration_seconds) DESC OFFSET 1 LIMIT 1",
+    "expected_data": [
+      [
+        "donnacook@example.net"
+      ]
+    ]
+  },
+  {
+    "id": "Q071",
+    "difficulty": "hard",
+    "question": "Find the names of organizations that have churned but still have unpaid invoices.",
+    "expected_sql": "SELECT DISTINCT organizations.name FROM organizations JOIN subscriptions ON organizations.id = subscriptions.organization_id JOIN invoices ON subscriptions.id = invoices.subscription_id WHERE organizations.churned_at IS NOT NULL AND invoices.paid_status != 'paid'",
+    "expected_data": [
+      [
+        "Duke LLC"
+      ],
+      [
+        "Frederick PLC"
+      ],
+      [
+        "Hunter-Smith"
+      ],
+      [
+        "Lee-Nicholson"
+      ],
+      [
+        "Lewis-Sampson"
+      ],
+      [
+        "Reed, Hughes and Smith"
+      ],
+      [
+        "Singleton-Greene"
+      ]
+    ]
+  },
+  {
+    "id": "Q072",
+    "difficulty": "hard",
+    "question": "Calculate the total churned revenue, which is the sum of subscription amounts for all churned organizations.",
+    "expected_sql": "SELECT SUM(subscriptions.amount) FROM subscriptions JOIN organizations ON subscriptions.organization_id = organizations.id WHERE organizations.churned_at IS NOT NULL",
+    "expected_data": [
+      [
+        "6379.11"
+      ]
+    ]
+  },
+  {
+    "id": "Q073",
+    "difficulty": "hard",
+    "question": "Which experiment variant has the highest average session duration among its assigned users?",
+    "expected_sql": "SELECT experiments.variant FROM experiment_assignments JOIN experiments ON experiment_assignments.experiment_id = experiments.id JOIN sessions ON experiment_assignments.user_id = sessions.user_id GROUP BY experiments.variant ORDER BY AVG(sessions.duration_seconds) DESC LIMIT 1",
+    "expected_data": [
+      [
+        "variant_a"
+      ]
+    ]
+  },
+  {
+    "id": "Q074",
+    "difficulty": "hard",
+    "question": "Get the organization name with the highest number of support tickets created within the first 30 days of the organization being created.",
+    "expected_sql": "SELECT organizations.name FROM support_tickets JOIN organizations ON support_tickets.organization_id = organizations.id WHERE support_tickets.created_at <= organizations.created_at + INTERVAL '30 days' GROUP BY organizations.name ORDER BY COUNT(support_tickets.id) DESC LIMIT 1",
+    "expected_data": [
+      [
+        "Short Ltd"
+      ]
+    ]
+  },
+  {
+    "id": "Q075",
+    "difficulty": "edge_case",
+    "question": "Give me the raw ID of the invoice with the lowest non-zero amount.",
+    "expected_sql": "SELECT id FROM invoices WHERE amount > 0 ORDER BY amount ASC LIMIT 1",
+    "expected_data": [
+      [
+        "30912168-5a72-4c85-970a-0ddbf2129c3a"
+      ]
+    ]
+  },
+  {
+    "id": "Q076",
+    "difficulty": "edge_case",
+    "question": "What is the total duration of sessions for the exact user_id '64f2a477-2a4e-4791-8e9a-acec0688e0e2'?",
+    "expected_sql": "SELECT SUM(duration_seconds) FROM sessions WHERE user_id = '64f2a477-2a4e-4791-8e9a-acec0688e0e2'",
+    "expected_data": [
+      [
+        null
+      ]
+    ]
+  },
+  {
+    "id": "Q077",
+    "difficulty": "edge_case",
+    "question": "Show me the emails of any users who have a NULL role.",
+    "expected_sql": "SELECT email FROM users WHERE role IS NULL",
+    "expected_data": []
+  },
+  {
+    "id": "Q078",
+    "difficulty": "edge_case",
+    "question": "Return the raw IDs of the top 3 most recently created organizations.",
+    "expected_sql": "SELECT id FROM organizations ORDER BY created_at DESC LIMIT 3",
+    "expected_data": [
+      [
+        "10811edf-0308-4657-873f-bbceebba837c"
+      ],
+      [
+        "c5294be2-027d-41e1-92d0-64543048052a"
+      ],
+      [
+        "e88ea99b-50d2-4981-8044-b2590fa7cad0"
+      ]
+    ]
+  },
+  {
+    "id": "Q079",
+    "difficulty": "edge_case",
+    "question": "How many events have an event_timestamp that accidentally occurred in the future (after today)?",
+    "expected_sql": "SELECT COUNT(*) FROM events WHERE event_timestamp > CURRENT_TIMESTAMP",
+    "expected_data": [
+      [
+        "0"
+      ]
+    ]
+  },
+  {
+    "id": "Q080",
+    "difficulty": "edge_case",
+    "question": "What is the exact string stored in the 'action_type' column of the most recent audit log?",
+    "expected_sql": "SELECT action_type FROM audit_logs ORDER BY created_at DESC LIMIT 1",
+    "expected_data": [
+      [
+        "delete_user"
+      ]
+    ]
+  },
+  {
+    "id": "Q081",
+    "difficulty": "easy",
+    "question": "How many users are located in India?",
+    "expected_sql": "SELECT COUNT(*) FROM users WHERE country = 'India'",
+    "expected_data": [
+      [
+        "320"
+      ]
+    ]
+  },
+  {
+    "id": "Q082",
+    "difficulty": "easy",
+    "question": "List the distinct plan types currently offered in the subscriptions table.",
+    "expected_sql": "SELECT DISTINCT plan_type FROM subscriptions",
+    "expected_data": [
+      [
+        "pro"
+      ],
+      [
+        "free"
+      ],
+      [
+        "enterprise"
+      ]
+    ]
+  },
+  {
+    "id": "Q083",
+    "difficulty": "easy",
+    "question": "How many subscriptions have a status of 'canceled'?",
+    "expected_sql": "SELECT COUNT(*) FROM subscriptions WHERE status = 'canceled'",
+    "expected_data": [
+      [
+        "24"
+      ]
+    ]
+  },
+  {
+    "id": "Q084",
+    "difficulty": "easy",
+    "question": "What is the total number of events logged by users on 'mobile' devices?",
+    "expected_sql": "SELECT COUNT(*) FROM events WHERE device_type = 'mobile'",
+    "expected_data": [
+      [
+        "6646"
+      ]
+    ]
+  },
+  {
+    "id": "Q085",
+    "difficulty": "medium",
+    "question": "How many events has each user role generated in total?",
+    "expected_sql": "SELECT users.role, COUNT(events.id) FROM events JOIN users ON events.user_id = users.id GROUP BY users.role",
+    "expected_data": [
+      [
+        "admin",
+        "10072"
+      ],
+      [
+        "member",
+        "9928"
+      ]
+    ]
+  },
+  {
+    "id": "Q086",
+    "difficulty": "medium",
+    "question": "Which organizations have never created a single user account?",
+    "expected_sql": "SELECT name FROM organizations WHERE id NOT IN (SELECT DISTINCT organization_id FROM users WHERE organization_id IS NOT NULL)",
+    "expected_data": []
+  },
+  {
+    "id": "Q087",
+    "difficulty": "medium",
+    "question": "Find the total number of support tickets resolved within 24 hours of creation.",
+    "expected_sql": "SELECT COUNT(*) FROM support_tickets WHERE resolved_at IS NOT NULL AND resolved_at <= created_at + INTERVAL '24 hours'",
+    "expected_data": [
+      [
+        "237"
+      ]
+    ]
+  },
+  {
+    "id": "Q088",
+    "difficulty": "medium",
+    "question": "What are the top 3 months that had the highest number of user signups?",
+    "expected_sql": "SELECT DATE_TRUNC('month', signup_date) AS signup_month, COUNT(*) FROM users GROUP BY signup_month ORDER BY COUNT(*) DESC LIMIT 3",
+    "expected_data": [
+      [
+        "2025-08-01 00:00:00+05:30",
+        "98"
+      ],
+      [
+        "2024-04-01 00:00:00+05:30",
+        "96"
+      ],
+      [
+        "2025-04-01 00:00:00+05:30",
+        "95"
+      ]
+    ]
+  },
+  {
+    "id": "Q089",
+    "difficulty": "hard",
+    "question": "Count the number of users who have logged an event on 'mobile' but NEVER on 'web'.",
+    "expected_sql": "SELECT COUNT(DISTINCT users.id) FROM users JOIN events ON users.id = events.user_id WHERE events.device_type = 'mobile' AND users.id NOT IN (SELECT user_id FROM events WHERE device_type = 'web')",
+    "expected_data": [
+      [
+        "78"
+      ]
+    ]
+  },
+  {
+    "id": "Q090",
+    "difficulty": "hard",
+    "question": "Which experiment variant led to the highest total feature usage?",
+    "expected_sql": "SELECT experiments.variant FROM experiment_assignments JOIN experiments ON experiment_assignments.experiment_id = experiments.id JOIN feature_usage ON experiment_assignments.user_id = feature_usage.user_id GROUP BY experiments.variant ORDER BY SUM(feature_usage.usage_count) DESC LIMIT 1",
+    "expected_data": [
+      [
+        "variant_a"
+      ]
+    ]
+  },
+  {
+    "id": "Q091",
+    "difficulty": "hard",
+    "question": "List the names of organizations that have paid more than 10000 in total invoices but have since churned.",
+    "expected_sql": "SELECT organizations.name FROM organizations JOIN subscriptions ON organizations.id = subscriptions.organization_id JOIN invoices ON subscriptions.id = invoices.subscription_id WHERE organizations.churned_at IS NOT NULL AND invoices.paid_status = 'paid' GROUP BY organizations.name HAVING SUM(invoices.amount) > 10000",
+    "expected_data": []
+  },
+  {
+    "id": "Q092",
+    "difficulty": "hard",
+    "question": "What is the average session duration for users belonging to organizations in the 'Finance' industry?",
+    "expected_sql": "SELECT AVG(sessions.duration_seconds) FROM sessions JOIN users ON sessions.user_id = users.id JOIN organizations ON users.organization_id = organizations.id WHERE organizations.industry = 'Finance'",
+    "expected_data": [
+      [
+        "3590.9109498680738786"
+      ]
+    ]
+  },
+  {
+    "id": "Q093",
+    "difficulty": "hard",
+    "question": "Which feature is most commonly flagged as enabled for the 'enterprise' plan?",
+    "expected_sql": "SELECT feature_name FROM feature_flags WHERE enabled_for_plan = 'enterprise' GROUP BY feature_name ORDER BY COUNT(*) DESC LIMIT 1",
+    "expected_data": [
+      [
+        "analytics_dashboard"
+      ]
+    ]
+  },
+  {
+    "id": "Q094",
+    "difficulty": "hard",
+    "question": "Find the emails of users who have signed up, but have zero logged sessions in the sessions table.",
+    "expected_sql": "SELECT users.email FROM users LEFT JOIN sessions ON users.id = sessions.user_id WHERE sessions.id IS NULL",
+    "expected_data": [
+      [
+        "dkey@example.com"
+      ],
+      [
+        "sherihernandez@example.com"
+      ],
+      [
+        "morrisongarrett@example.net"
+      ],
+      [
+        "mitchell09@example.org"
+      ],
+      [
+        "justinhicks@example.com"
+      ],
+      [
+        "wilsonreginald@example.org"
+      ],
+      [
+        "taylorraymond@example.com"
+      ],
+      [
+        "nortontammy@example.com"
+      ]
+    ]
+  },
+  {
+    "id": "Q095",
+    "difficulty": "edge_case",
+    "question": "Are there any subscriptions where the end_date was mistakenly set before the start_date?",
+    "expected_sql": "SELECT COUNT(*) > 0 FROM subscriptions WHERE end_date < start_date",
+    "expected_data": [
+      [
+        "False"
+      ]
+    ]
+  },
+  {
+    "id": "Q096",
+    "difficulty": "edge_case",
+    "question": "Return the raw user_id of the person who holds the record for the single longest session duration.",
+    "expected_sql": "SELECT user_id FROM sessions ORDER BY duration_seconds DESC LIMIT 1",
+    "expected_data": [
+      [
+        "ccfbdb4b-b6f4-4906-81ab-1e76e0ac1b8b"
+      ]
+    ]
+  },
+  {
+    "id": "Q097",
+    "difficulty": "edge_case",
+    "question": "Give me the raw IDs of any feature flags that currently have a 0 percent rollout.",
+    "expected_sql": "SELECT id FROM feature_flags WHERE rollout_percentage = 0",
+    "expected_data": [
+      [
+        "b56f53e6-f58e-434f-8e69-4a9bbc24f928"
+      ],
+      [
+        "1cbc50c5-9574-408e-9052-0955c6d38160"
+      ]
+    ]
+  },
+  {
+    "id": "Q098",
+    "difficulty": "edge_case",
+    "question": "Extract the exact 'error_code' value from the JSONB properties of the event with ID '3431e64a-4022-4c00-bfe8-89796c9bb466'.",
+    "expected_sql": "SELECT event_properties->>'error_code' FROM events WHERE id = '3431e64a-4022-4c00-bfe8-89796c9bb466'",
+    "expected_data": []
+  },
+  {
+    "id": "Q099",
+    "difficulty": "edge_case",
+    "question": "Count the number of users whose email address does not contain an '@' symbol.",
+    "expected_sql": "SELECT COUNT(*) FROM users WHERE email NOT LIKE '%@%'",
+    "expected_data": [
+      [
+        "0"
+      ]
+    ]
+  },
+  {
+    "id": "Q100",
+    "difficulty": "edge_case",
+    "question": "Show me the raw organization_ids for companies where the industry column is NULL.",
+    "expected_sql": "SELECT id FROM organizations WHERE industry IS NULL",
+    "expected_data": []
+  }
+]

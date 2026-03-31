@@ -1,0 +1,16 @@
+# Security (NEVER upload API keys)
+.env
+
+# Virtual Environments (Too heavy, cloud will install its own)
+nl2aqlvenv/
+
+# AI Vector Databases (Too heavy, breaks on cloud)
+chroma_data/
+
+# Application Logs
+logs/
+
+# Caches and Testing junk
+__pycache__/
+.pytest_cache/
+.deepeval/
