@@ -1,0 +1,19 @@
+name: Build Backend Container
+
+# 1. THE TRIGGER: When should this run?
+on:
+  push:
+    branches: [ "develop", "main" ]
+
+jobs:
+  cloud-build:
+    # 2. THE SERVER: What kind of computer should GitHub turn on?
+    runs-on: ubuntu-latest 
+
+    steps:
+      # Step A: Download your code onto the GitHub server
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+      # Step B: Run the exact command you tried to run locally!
+      - name: Build Docker Image
+        run: docker build -t datapilot-backend -f Dockerfile.backend .

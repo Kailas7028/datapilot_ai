@@ -1,0 +1,16 @@
+# Exclude heavy local environments
+nl2aqlvenv/
+chroma_data/
+
+# Exclude security files
+.env
+
+# Exclude caches and git history
+__pycache__/
+.pytest_cache/
+.deepeval/
+.git/
+logs/
+
+# Exclude the frontend (this container is backend ONLY)
+frontend/
