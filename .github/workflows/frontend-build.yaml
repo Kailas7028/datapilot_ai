@@ -1,0 +1,17 @@
+name: Build Frontend Container
+
+on:
+  push:
+    branches: [ "develop", "main" ]
+
+jobs:
+  cloud-build:
+    runs-on: ubuntu-latest 
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # Notice the different tag (-t) and different file (-f)
+      - name: Build Docker Image
+        run: docker build -t datapilot-frontend -f Dockerfile.frontend .
