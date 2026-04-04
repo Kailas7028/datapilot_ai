@@ -23,4 +23,6 @@ def run_agent(question):
     return {"result":result.get("result", "No result returned"),
             "generated_sql": result.get("generated_sql", "No SQL generated"),
             "input_tokens": result.get("input_tokens", 0),
-            "output_tokens": result.get("output_tokens", 0)}
+            "output_tokens": result.get("output_tokens", 0),
+            "result_summary": result.get("result_summary", "No summary generated")
+            }

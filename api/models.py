@@ -8,3 +8,5 @@ class QueryResponse(BaseModel):
     question: str
     generated_sql: Optional[str] = None
     result: Optional[Any] = None
+    result_summary: Optional[str] = None
+    

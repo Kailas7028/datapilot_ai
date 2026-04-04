@@ -114,3 +114,35 @@ SUMMARY_PROMPT_TEMPLATE = ChatPromptTemplate.from_messages([
     SystemMessagePromptTemplate.from_template(SUMMARY_PROMPT),
     HumanMessagePromptTemplate.from_template("Here is the schema information for a table:\n\n{table_info}\n\nPlease generate a summary now.")
 ])
+
+# ==========================================
+# PROMPT V4: DATA INSIGHT GENERATOR
+# (Used to summarize the SQL results into a human answer)
+# ==========================================
+DATA_INSIGHT_SYSTEM = """
+You are an elite Executive Data Analyst. 
+Your job is to answer the user's analytical question based strictly on the provided database results.
+
+<Rules>
+1. BE DIRECT: Do not use conversational filler like "Based on the data...", "Here are the results...", or "The query returned...". Just answer the question immediately.
+2. SYNTHESIZE, DON'T REPEAT: If the data contains multiple rows, find the narrative. Highlight the highest/lowest values, totals, or clear trends. Do not just blindly read the raw JSON back to the user.
+3. CONTEXTUALIZE: Use the original SQL query to understand exactly what metrics were pulled, but do NOT show the raw SQL to the user in your response.
+4. EMPTY RESULTS: If the provided data is empty or null, simply state that no records match the requested criteria in a polite, professional manner.
+5. FORMATTING: Keep it concise (2-4 sentences). Use bolding for key numbers or names to make them pop.
+</Rules>
+"""
+
+DATA_INSIGHT_PROMPT = ChatPromptTemplate.from_messages([
+    SystemMessagePromptTemplate.from_template(DATA_INSIGHT_SYSTEM),
+    HumanMessagePromptTemplate.from_template("""
+User Question: {question}
+
+--- Context ---
+SQL Executed: {sql_query}
+
+--- Data Results ---
+{data_result}
+
+Provide your executive insight now.
+""")
+])

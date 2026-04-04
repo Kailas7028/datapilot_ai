@@ -7,11 +7,13 @@ from logging.handlers import RotatingFileHandler
 
 # Context variable to hold the request ID for each log entry, allowing us to trace logs back to specific requests in a multi-threaded or async environment.
 request_id_var: ContextVar[str] = ContextVar('request_id', default='default')
+user_id_var: ContextVar[str] = ContextVar('user_id', default= 'anonymous')
 
 #create a custom logging filter to inject the request ID into log records
 class RequestIDFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         record.request_id = request_id_var.get()
+        record.user_id = user_id_var.get()
         return True
 
 def get_logger(name: str) -> logging.Logger:
@@ -44,7 +46,7 @@ def get_logger(name: str) -> logging.Logger:
 
         # 5. Create formatter
         formatter = logging.Formatter(
-            '%(asctime)s | [%(request_id)s] | %(levelname)-8s | %(name)s | %(message)s', 
+            '%(asctime)s | [%(user_id)s] | [%(request_id)s] | %(levelname)-8s | %(name)s | %(message)s', 
             datefmt='%Y-%m-%d %H:%M:%S'
         )
 

@@ -10,3 +10,4 @@ class AgentState(TypedDict):
     retries: int
     input_tokens: int
     output_tokens: int
+    result_summary: Optional[str]

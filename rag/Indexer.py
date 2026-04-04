@@ -8,6 +8,7 @@ from langchain_core.documents import Document
 from app.db import get_connection
 from agent.summary_agent import SummaryAgent
 from rag.chromadb_impl import ChromaDBWrapper
+from rag.pinecone_impl import PineconeWrapper
 from utils.loggers import get_logger
 
 # Initialize Centralized Logger
@@ -32,7 +33,7 @@ class SchemaIndexer:
     
     def __init__(self):
         self.summary_agent = SummaryAgent()
-        self.vector_db = ChromaDBWrapper()
+        self.vector_db = PineconeWrapper()  # Switch to ChromaDBWrapper() for local testing
         logger.info("SchemaIndexer initialized and connected to Vector DB.")
 
     # def _createDocument(self, content: str, source: str, description: str = None, hashcode: str = None) -> Document:

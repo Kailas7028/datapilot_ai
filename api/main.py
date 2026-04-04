@@ -86,12 +86,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from api.models import QueryRequest, QueryResponse
 import uvicorn
 from agent.agent import run_agent
-from utils.loggers import get_logger, request_id_var
+from utils.loggers import get_logger, request_id_var, user_id_var
 import uuid
 import time
 from datetime import timedelta
 from api.auth import verify_password, create_access_token, get_current_user,ACCESS_TOKEN_EXPIRE_MINUTES, get_user_from_db, get_user_from_db, create_user_in_db, get_password_hash
 from pydantic import BaseModel
+import os
 logger = get_logger(__name__)
 
 # Initialize the FastAPI app
@@ -118,6 +119,7 @@ async def add_request_id_to_logs(request: Request, call_next):
     
     # Set the request ID in the context variable for this request
     token = request_id_var.set(request_id)
+    id = user_id_var.get()  # Get the user_id from the context variable (if set by auth)
 
     start_time = time.perf_counter()
     try:
@@ -192,14 +194,14 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
         
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
-        data={"sub": user["username"]}, expires_delta=access_token_expires
+        data={"sub": user["id"]}, expires_delta=access_token_expires
     )
     return {"access_token": access_token, "token_type": "bearer"}
 #-----------------------------------------------------------------------------------------------------------
 
 # Create the async endpoint
 @app.post("/api/v1/query", response_model=QueryResponse)
-async def ask_database(payload: QueryRequest):
+async def ask_database(payload: QueryRequest, user: dict = Depends(get_current_user)):
     logger.info(f"Received query: {payload.question}")
     try:
         # Execute the LangGraph workflow
@@ -209,7 +211,8 @@ async def ask_database(payload: QueryRequest):
         return QueryResponse(
             question=payload.question,
             generated_sql=state_result.get("generated_sql"),
-            result=state_result.get("result")
+            result=state_result.get("result"),
+            result_summary=state_result.get("result_summary")
         )
         
     except Exception as e:
@@ -219,4 +222,14 @@ async def ask_database(payload: QueryRequest):
 
 # Run the server
 if __name__ == "__main__":
-    uvicorn.run("api.main:app", host="0.0.0.0", port=8000, reload=True)
+    # Check if we are running in Render's cloud environment
+    is_render = os.environ.get("RENDER") is not None
+    
+    # If in the cloud, open to the internet (0.0.0.0). 
+    # If on your laptop, keep it safely restricted to localhost (127.0.0.1) to avoid Windows errors.
+    host = "0.0.0.0" if is_render else "127.0.0.1"
+    
+    # Grab Render's dynamic port, or fallback to 8000 locally
+    port = int(os.environ.get("PORT", 8000))
+    
+    uvicorn.run("api.main:app", host=host, port=port)

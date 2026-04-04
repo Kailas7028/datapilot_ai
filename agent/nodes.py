@@ -1,16 +1,16 @@
 """ Agent nodes for handling different stages of the SQL generation and execution process """
 #sql generation node
-from llm.prompts import FEW_SHOT_COT_PROMPT
+from llm.prompts import FEW_SHOT_COT_PROMPT, DATA_INSIGHT_PROMPT
 from llm.llm_provider import GroqLlamaProvider
 from agent.state import AgentState
 from utils.loggers import get_logger
-from rag.chromadb_impl import ChromaDBWrapper
+from rag.pinecone_impl import PineconeWrapper
 import json
 
 # Initialize logger
 logger = get_logger(__name__)
 #initialize retriever object
-retriever = ChromaDBWrapper()
+retriever = PineconeWrapper()
 provider = GroqLlamaProvider()
 
 #sql generation node
@@ -153,3 +153,21 @@ def retriever_node(state: AgentState) -> AgentState:
 
     logger.info(f"Retrieved {len(formatted_tables)} relevant documents.")
     return {"retrieved_docs": formatted_tables}
+
+# result summarization node
+#------------------------------------------------
+def result_summarization_node(state: AgentState) -> AgentState:
+    """
+    Node for summarizing the SQL results into a human-readable answer
+    """
+    logger.info("Summarizing SQL results into a human-readable answer.")
+    try:
+        # THE FIX: Add default=str to safely cast Decimals, Dates, and UUIDs to strings
+        safe_json = json.dumps(state["result"], default=str)
+        response = provider.generate(prompt_template=DATA_INSIGHT_PROMPT, data_result=safe_json, sql_query=state["generated_sql"], question=state["question"])
+        summary = response.content.strip()
+        logger.info("Result summarization successful.")
+        return {"result_summary": summary, "error": None}
+    except Exception as e:
+        logger.error(f"Error occurred during result summarization: {str(e)}")
+        return {"result_summary": None, "error": str(e)}
