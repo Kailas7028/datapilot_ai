@@ -27,4 +27,4 @@ COPY config.py .
 EXPOSE 8000
 
 # 8. The command to boot up Uvicorn when the server turns on
-CMD ["python", "main.py"]
+CMD ["python", "api/main.py"]
