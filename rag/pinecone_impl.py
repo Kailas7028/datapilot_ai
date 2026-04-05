@@ -98,7 +98,8 @@ class PineconeWrapper(BaseVectorDB):
                 search_query["filter"] = metadata_filters
 
             results = self.index.search(
-                query=search_query
+                query=search_query,
+                namespace="__default__"
             )
             
             # Safely extract hits from Pinecone's dictionary response
