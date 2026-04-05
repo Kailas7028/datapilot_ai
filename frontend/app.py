@@ -1,15 +1,16 @@
 import streamlit as st
 import requests
 import pandas as pd
+import os
 
 # --- Configuration ---
 # Ensure these match your FastAPI server routes!
-BASE_URL = "http://127.0.0.1:8000/api/v1"
+BASE_URL = os.getenv("BACKEND_URL", "http://127.0.0.1:8000/api/v1")
 API_URL = f"{BASE_URL}/query"
 LOGIN_URL = f"{BASE_URL}/login"
 REGISTER_URL = f"{BASE_URL}/register"
 
-st.set_page_config(page_title="Datapilot AI Insights", page_icon="🌌", layout="wide")
+st.set_page_config(page_title="Datapilot AI Insights", page_icon="📊", layout="wide")
 
 # --- UI Helper: Coming Soon Notification ---
 def show_coming_soon(feature_name):
