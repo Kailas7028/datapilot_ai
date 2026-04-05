@@ -93,10 +93,12 @@ class PineconeWrapper(BaseVectorDB):
                 "inputs": {"text": query},
                 "top_k": limit
             }
-            
+            # Add the filter to the dictionary if it exists
+            if metadata_filters:
+                search_query["filter"] = metadata_filters
+
             results = self.index.search(
-                query=search_query,
-                filter=metadata_filters
+                query=search_query
             )
             
             # Safely extract hits from Pinecone's dictionary response

@@ -20,8 +20,8 @@ def sql_generation_node(state: AgentState) -> AgentState:
     Node for generating SQL from the question and schema prompt
     """
     try:
-        logger.info(f"Generating SQL for the question: {state['question']}")
-        response = provider.generate(prompt_template=FEW_SHOT_COT_PROMPT,schema = state["retrieved_docs"],question = state ["question"])
+        logger.info(f"Generating SQL for the question: {state.get('question','')}")
+        response = provider.generate(prompt_template=FEW_SHOT_COT_PROMPT,schema = state.get("retrieved_docs",[]),question = state.get("question",""))
         input_tokens=response.usage_metadata.get("input_tokens", 0)
         output_tokens=response.usage_metadata.get("output_tokens", 0)
         # 3. Clean the output (Replace the logic we lost from sql_agent)
@@ -57,9 +57,9 @@ def sql_validation_node(state: AgentState) -> AgentState:
     """
     logger.info("Validating generated SQL.")
     try:
-        validate_sql(state['generated_sql'])
+        validate_sql(state.get("generated_sql", ""))
         logger.info("SQL validation successful.")
-        return {"validated_sql":state['generated_sql'], "error": None}
+        return {"validated_sql":state.get("generated_sql", ""), "error": None}
     except ValueError as e:
         logger.warning(f"SQL validation failed: {str(e)}")
         return {"validated_sql": None, "error": str(e)}
@@ -74,8 +74,8 @@ def sql_execution_node(state: AgentState) -> AgentState:
     """
     try:
         logger.info("Executing validated SQL.")
-        if state['validated_sql']:
-            result = execute_sql(state['validated_sql'])
+        if state.get("validated_sql"):
+            result = execute_sql(state.get("validated_sql", ""))
             logger.info(f"SQL execution successful.")
             return {"result": result, "error": None}
     except Exception as e:
@@ -92,20 +92,13 @@ def retriever_node(state: AgentState) -> AgentState:
     Node for retrieving relevant documents from the vector store based on the question
     """
     logger.info("Retrieving relevant documents from vector store.")
-    results = retriever.search(query=state["question"], limit=2)
+    results = retriever.search(query=state.get("question", ""), limit=2)
     
     if not results:
         print("No results found!")
         return
 
-    # 4. Print out what the AI thinks are the best tables
-    # for i, doc in enumerate(results, 1):
-    #     source = doc.metadata.get("source", "Unknown Table")
-    #     # Print the table name and the first 150 characters of the summary
-    #     print(f"🥇 Rank {i}: {source}")
-    #     print(f"Table Data: {doc.metadata}")
-    #     print(f"📝 Summary: {doc.page_content}...\n
-
+   
     
     formatted_tables = []
 
@@ -163,8 +156,8 @@ def result_summarization_node(state: AgentState) -> AgentState:
     logger.info("Summarizing SQL results into a human-readable answer.")
     try:
         # THE FIX: Add default=str to safely cast Decimals, Dates, and UUIDs to strings
-        safe_json = json.dumps(state["result"], default=str)
-        response = provider.generate(prompt_template=DATA_INSIGHT_PROMPT, data_result=safe_json, sql_query=state["generated_sql"], question=state["question"])
+        safe_json = json.dumps(state.get("result",""), default=str)
+        response = provider.generate(prompt_template=DATA_INSIGHT_PROMPT, data_result=safe_json, sql_query=state.get("generated_sql", ""), question=state.get("question", ""))
         summary = response.content.strip()
         logger.info("Result summarization successful.")
         return {"result_summary": summary, "error": None}
