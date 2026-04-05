@@ -1,25 +1,27 @@
-# 1. Start with lightweight Python
 FROM python:3.10-slim
 
-# 2. Set the working directory
+# 2. Create the working directory
 WORKDIR /app
 
-# 3. Streamlit requires a few basic system tools to render UI
+# 3. Basic system tools (Cleaned up as discussed)
 RUN apt-get update && apt-get install -y \
     build-essential \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# 4. Copy requirements and install
-COPY requirements.txt .
+# 4. Copy requirements from the frontend folder into the container
+COPY frontend/requirements.txt .
+
+# 5. Install dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 5. Copy ONLY the frontend and configuration files
-COPY . .
-# 6. Open Streamlit's default port
+# 6. Copy ONLY the frontend folder and its subfolders (.streamlit, etc.)
+COPY frontend/ ./frontend/
+
+# 7. Expose the default Streamlit port
 EXPOSE 8501
 
-# 7. The ignition switch for Streamlit
-# CMD ["streamlit", "run", "frontend/app.py", "--server.port=8501", "--server.address=0.0.0.0"]
-# 8. Start Streamlit pointing to the correct folder
-CMD ["streamlit", "run", "frontend/app.py", "--server.port", "8501", "--server.address", "0.0.0.0"]
+# 8. Start Streamlit
+# Note: Since we copied the 'frontend' folder into '/app', 
+# the path to your file is now 'frontend/app.py'
+CMD ["streamlit", "run", "frontend/app.py", "--server.port=8501", "--server.address=0.0.0.0"]
