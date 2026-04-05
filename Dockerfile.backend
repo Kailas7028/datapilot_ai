@@ -16,12 +16,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # 6. Copy all your specific backend folders into the container
-COPY api/ ./api/
-COPY agent/ ./agent/
-COPY rag/ ./rag/
-COPY llm/ ./llm/
-COPY utils/ ./utils/
-COPY config.py .
+COPY . .
 
 # 7. Open port 8000 to the outside world
 EXPOSE 8000
