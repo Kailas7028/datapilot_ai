@@ -93,6 +93,7 @@ def retriever_node(state: AgentState) -> AgentState:
     """
     logger.info("Retrieving relevant documents from vector store.")
     results = retriever.search(query=state.get("question", ""), limit=2)
+    logger.info(f"Retriever returned {results}.")
     
     if not results:
         print("No results found!")
