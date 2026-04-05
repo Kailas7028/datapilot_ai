@@ -1,7 +1,6 @@
 import os
 from typing import Dict, List, Any, Optional
 from pinecone import Pinecone
-from sentence_transformers import SentenceTransformer
 from langchain_core.documents import Document
 from rag.basevectoredb import BaseVectorDB
 from utils.loggers import get_logger
@@ -11,7 +10,7 @@ load_dotenv()
 logger = get_logger(__name__)
 
 class PineconeWrapper(BaseVectorDB):
-    """Production implementation of the Vector DB interface using Pinecone."""
+    """Production implementation of the Vector DB interface using Pinecone Inference."""
     _instance = None
     _is_initialized = None
 
@@ -24,9 +23,8 @@ class PineconeWrapper(BaseVectorDB):
         if self._is_initialized:
             return
 
-        # 1. Load the exact model ChromaDB was using secretly
-        logger.info("Loading embedding model (all-MiniLM-L6-v2)...")
-        self.embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+        
+        self.embedding_model_name = "multilingual-e5-large" 
         
         self.pc = None
         self.index = None
@@ -51,7 +49,7 @@ class PineconeWrapper(BaseVectorDB):
             raise RuntimeError("VectorDatabase connection failed") from e
         
     def upsert(self, documents: List[Document]) -> bool:
-        """Embeds text and uploads to Pinecone."""
+        """Embeds text using Pinecone API and uploads to Pinecone."""
         if not documents:
             return None
         try:
@@ -62,10 +60,15 @@ class PineconeWrapper(BaseVectorDB):
                 if not doc_id:
                     raise ValueError("Document metadata missing 'source' key.")
                 
-                # Convert the text into a 384-dimension vector
-                embedding = self.embedding_model.encode(doc.page_content).tolist()
+                # 1. Ask Pinecone to generate the embedding via API
+                embedding_response = self.pc.inference.embed(
+                    model=self.embedding_model_name,
+                    inputs=[doc.page_content],
+                    parameters={"input_type": "passage", "truncate": "END"}
+                )
+                embedding = embedding_response[0].values
                 
-                # Pinecone expects metadata to be a dictionary, we store the raw text here too
+                # 2. Prepare metadata
                 metadata = doc.metadata.copy()
                 metadata["text"] = doc.page_content
 
@@ -83,31 +86,29 @@ class PineconeWrapper(BaseVectorDB):
             logger.error(f"Failed to upsert data: {e}") 
             return False
             
-        
-
     def get_metadata_by_id(self, doc_id: str) -> Optional[Dict[str,Any]]:
         """Retrieves metadata without pulling the vector."""
         try:
             result = self.index.fetch(ids=[doc_id])
-            
-            # V3 Object Notation: Check if the attribute exists
             if hasattr(result, 'vectors') and doc_id in result.vectors:
-                # Access the metadata attribute directly
                 return result.vectors[doc_id].metadata
             return None
-            
         except Exception as e:
-            # Changed to debug so it doesn't print red text on first runs
             logger.debug(f"Vector {doc_id} not found. Proceeding to embed.")
             return None
             
     def search(self, query: str, limit: int = 5, metadata_filters: Optional[Dict[str,Any]] = None) -> List[Document]:
-        """Embeds the search query and finds nearest neighbors."""
+        """Embeds the search query using Pinecone API and finds nearest neighbors."""
         try:
-            # Convert the user query into a vector
-            query_embedding = self.embedding_model.encode(query).tolist()
+            # 1. Ask Pinecone to embed the search query
+            query_embedding_response = self.pc.inference.embed(
+                model=self.embedding_model_name,
+                inputs=[query],
+                parameters={"input_type": "query", "truncate": "END"}
+            )
+            query_embedding = query_embedding_response[0].values
             
-            # Search Pinecone
+            # 2. Search Pinecone Index
             results = self.index.query(
                 vector=query_embedding,
                 top_k=limit,
@@ -115,16 +116,12 @@ class PineconeWrapper(BaseVectorDB):
                 filter=metadata_filters
             )
             
-            # V3 Object Notation: Check the .matches attribute
             if not hasattr(results, 'matches') or not results.matches:
                 return []
           
             langchain_docs = []
-            for match in results.matches: # Dot notation here
-                # Match is now an object, so we access .metadata
+            for match in results.matches: 
                 metadata = match.metadata or {}
-                
-                # Extract the raw text we saved during upsert
                 page_content = metadata.pop("text", "") 
                 
                 doc = Document(

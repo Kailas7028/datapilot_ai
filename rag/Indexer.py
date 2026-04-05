@@ -4,10 +4,9 @@ import time
 from typing import Iterator
 from psycopg2.extras import RealDictCursor
 from langchain_core.documents import Document
-
 from app.db import get_connection
 from agent.summary_agent import SummaryAgent
-from rag.chromadb_impl import ChromaDBWrapper
+#from rag.chromadb_impl import ChromaDBWrapper
 from rag.pinecone_impl import PineconeWrapper
 from utils.loggers import get_logger
 
