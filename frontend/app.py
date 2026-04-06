@@ -11,6 +11,10 @@ API_URL = f"{BASE_URL}/query"
 LOGIN_URL = f"{BASE_URL}/login"
 REGISTER_URL = f"{BASE_URL}/register"
 
+# render api key
+RENDER_API_KEY = os.getenv("RENDER_API_KEY")
+RENDER_SERVICE_ID = os.getenv("RENDER_SERVICE_ID")
+
 st.set_page_config(page_title="Datapilot AI Insights", page_icon="📊", layout="wide")
 
 # --- UI Helper: Coming Soon Notification ---
@@ -118,6 +122,11 @@ if "messages" not in st.session_state:
 # ==========================================
 # 🔒 THE DRIBBBLE-STYLE LOGIN PAGE
 # ==========================================
+
+browser_header = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+}
+
 if not st.session_state.access_token:
     st.write("<br><br><br>", unsafe_allow_html=True)
     
@@ -135,89 +144,104 @@ if not st.session_state.access_token:
             st.markdown("### Welcome Back")
             tab_login, tab_register = st.tabs(["Log In", "Create Account"])
             
+            # --- TAB 1: LOG IN ---
             with tab_login:
                 with st.form("login_form"):
                     username = st.text_input("Email Address", placeholder="name@company.com")
                     password = st.text_input("Password", type="password", placeholder="••••••••")
 
                     if st.form_submit_button("Sign In", type="primary", use_container_width=True):
-                        with st.status("Connecting to server...",expanded=True) as status:
-                            st.write("This may take a moment if the server is waking up from sleep.")
+                        with st.status("Connecting to backend...", expanded=True) as status:
                             server_awake = False
-                            browser_header = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"}
+                            
+                            # 1. API Wake-Up Call
+                            status.update(label="Sending wake-up signal to Render...", state="running")
+                            try:
+                                render_url = f"https://api.render.com/v1/services/{RENDER_SERVICE_ID}/resume"
+                                headers = {"Authorization": f"Bearer {RENDER_API_KEY}", "Content-Type": "application/json"}
+                                requests.post(render_url, headers=headers, timeout=5)
+                            except Exception:
+                                pass # Fall back to polling if API fails
+                            
+                            # 2. Polling Loop
                             for i in range(15):
                                 try:
-                                    pulse = requests.get("https://datapilot-ai-cug8.onrender.com/", headers=browser_header, timeout=10)
-                                    if pulse.status_code not in [502,503]:
-                                        server_awake = True
-                                        break
-                                except requests.exceptions.RequestException:
-                                    pass
-                                status.update(label=f"Cloud server is waking up... ({i+1}/15) attempts",state="running")
-                                time.sleep(5)
-                            if not server_awake:
-                                status.update(label="Server waking-up timed out.", state="error")
-                                st.error("Login failed due to server timeout. The server may be waking up from sleep. Please wait a moment and try again.")
-                            else:
-                                status.update(label="Server is awake! Attempting to log in...", state="running")
-                                st.write("Sending login request...")
-                            
-                                try:
-                                    response = requests.post(LOGIN_URL, data={"username": username, "password": password}, timeout=60, headers=browser_header)
-                                    if response.status_code in [502,503]:
-                                        st.warning("The cloud server is currently waking up from sleep. Please wait 1 minute and click Login again!")
-                                    elif response.status_code == 200:
-                                        st.success("Login successful!")
-                                        st.session_state.access_token = response.json().get("access_token")
-                                        st.rerun()
-                                    else:
-                                        error_details = response.json().get("detail", "Login failed.")
-                                        st.error(error_details)
-                                except requests.exceptions.ReadTimeout:
-                                    st.error("Login timed out. The server may be waking up from sleep. Please wait a moment and try again.")
-                                except requests.exceptions.JSONDecodeError:
-                                    st.error(f"Server Error. Raw Response: {response.text[:100]}")
-                                except requests.exceptions.ConnectionError:
-                                    st.error("Could not connect to the backend server. Is your server running?")
-                            
-            with tab_register:
-                with st.form("register_form"):
-                    new_username = st.text_input("Email Address")
-                    new_password = st.text_input("Password", type="password")
-                    if st.form_submit_button("Sign Up", type="primary", use_container_width=True):
-                        with st.status("Creating your account...",expanded=True) as status:
-                            st.write("This may take a moment if the server is waking up from sleep.")
-                            server_awake = False
-                            for i in range(15):
-                                try:
-                                    pulse = requests.get("https://datapilot-ai-cug8.onrender.com/",timeout=5)
+                                    pulse = requests.get("https://datapilot-ai-cug8.onrender.com/docs", headers=browser_header, timeout=5)
                                     if pulse.status_code == 200:
                                         server_awake = True
                                         break
                                 except requests.exceptions.RequestException:
                                     pass
-                                status.update(label=f"Cloud server is waking up... ({i+1}/15) attempts",state="running")
+                                status.update(label=f"Cloud server is waking up... ({i+1}/15) attempts", state="running")
                                 time.sleep(5)
+                            
+                            # 3. Final Execution
                             if not server_awake:
-                                status.update(label="Server waking-up timed out.", state="error")
-                                st.error("Registration failed due to server timeout. The server may be waking up from sleep. Please wait a moment and try again.")
+                                status.update(label="Server wake-up timed out.", state="error")
+                                st.error("Login failed due to server timeout. Please try again.")
                             else:
-                                status.update(label="Server is awake! Attempting to register...", state="running")
-                                st.write("Sending registration request...")
+                                status.update(label="Server is awake! Logging in...", state="running")
                                 try:
-                                    response = requests.post(REGISTER_URL, json={"username": new_username, "password": new_password},timeout=60)
-                                    if response.status_code == 201:
-                                        st.success("Account created successfully! You can now log in.")
-                                    elif response.status_code in [502,503]:
-                                            st.warning("The cloud server is currently waking up from sleep. Please wait 1 minute and click Sign Up again!")
+                                    response = requests.post(LOGIN_URL, data={"username": username, "password": password}, timeout=60, headers=browser_header)
+                                    if response.status_code == 200:
+                                        status.update(label="Login successful!", state="complete")
+                                        st.session_state.access_token = response.json().get("access_token")
+                                        st.rerun()
                                     else:
+                                        status.update(label="Login failed.", state="error")
+                                        st.error(response.json().get("detail", "Login failed."))
+                                except Exception as e:
+                                    status.update(label="Connection Error", state="error")
+                                    st.error(f"Something went wrong: {str(e)}")
+
+            # --- TAB 2: REGISTER ---
+            with tab_register:
+                with st.form("register_form"):
+                    new_username = st.text_input("Email Address")
+                    new_password = st.text_input("Password", type="password")
+                    
+                    if st.form_submit_button("Sign Up", type="primary", use_container_width=True):
+                        with st.status("Preparing registration...", expanded=True) as status:
+                            server_awake = False
+                            
+                            # 1. API Wake-Up Call
+                            status.update(label="Sending wake-up signal to Render...", state="running")
+                            try:
+                                render_url = f"https://api.render.com/v1/services/{RENDER_SERVICE_ID}/resume"
+                                headers = {"Authorization": f"Bearer {RENDER_API_KEY}", "Content-Type": "application/json"}
+                                requests.post(render_url, headers=headers, timeout=5)
+                            except Exception:
+                                pass
+                            
+                            # 2. Polling Loop
+                            for i in range(15):
+                                try:
+                                    pulse = requests.get("https://datapilot-ai-cug8.onrender.com/docs", headers=browser_header, timeout=5)
+                                    if pulse.status_code == 200:
+                                        server_awake = True
+                                        break
+                                except requests.exceptions.RequestException:
+                                    pass
+                                status.update(label=f"Cloud server is waking up... ({i+1}/15) attempts", state="running")
+                                time.sleep(5)
+                                
+                            # 3. Final Execution
+                            if not server_awake:
+                                status.update(label="Server wake-up timed out.", state="error")
+                                st.error("Registration failed due to server timeout. Please try again.")
+                            else:
+                                status.update(label="Server is awake! Creating account...", state="running")
+                                try:
+                                    response = requests.post(REGISTER_URL, json={"username": new_username, "password": new_password}, timeout=60, headers=browser_header)
+                                    if response.status_code == 201:
+                                        status.update(label="Account created!", state="complete")
+                                        st.success("Account created successfully! You can now log in.")
+                                    else:
+                                        status.update(label="Registration failed.", state="error")
                                         st.error(response.json().get("detail", "Registration failed."))
-                                except requests.exceptions.ReadTimeout:
-                                    st.error("Registration timed out. The server may be waking up from sleep. Please wait a moment and try again.")
-                                except requests.exceptions.ConnectionError:
-                                    st.error("Could not connect to the backend server. Is your server running?")
-                                except requests.exceptions.JSONDecodeError:
-                                    st.error(f"Server Error. Raw Response: {response.text[:100]}")
+                                except Exception as e:
+                                    status.update(label="Connection Error", state="error")
+                                    st.error(f"Something went wrong: {str(e)}")
 
 # ==========================================
 # 📊 MAIN DASHBOARD (Logged In)
