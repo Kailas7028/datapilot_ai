@@ -2,6 +2,7 @@ import streamlit as st
 import requests
 import pandas as pd
 import os
+import time
 
 # --- Configuration ---
 # Ensure these match your FastAPI server routes!
@@ -138,25 +139,45 @@ if not st.session_state.access_token:
                 with st.form("login_form"):
                     username = st.text_input("Email Address", placeholder="name@company.com")
                     password = st.text_input("Password", type="password", placeholder="••••••••")
+
                     if st.form_submit_button("Sign In", type="primary", use_container_width=True):
-                        with st.spinner("Connecting to backend... (May take 60s if waking from sleep)"):
-                            try:
-                                response = requests.post(LOGIN_URL, data={"username": username, "password": password}, timeout=60)
-                                if response.status_code in [502,503]:
-                                    st.warning("The cloud server is currently waking up from sleep. Please wait 1 minute and click Login again!")
-                                elif response.status_code == 200:
-                                    st.success("Login successful!")
-                                    st.session_state.access_token = response.json().get("access_token")
-                                    st.rerun()
-                                else:
-                                    error_details = response.json().get("detail", "Login failed.")
-                                    st.error(error_details)
-                            except requests.exceptions.ReadTimeout:
-                                st.error("Login timed out. The server may be waking up from sleep. Please wait a moment and try again.")
-                            except requests.exceptions.JSONDecodeError:
-                                st.error(f"Server Error. Raw Response: {response.text[:100]}")
-                            except requests.exceptions.ConnectionError:
-                                st.error("Could not connect to the backend server. Is your server running?")
+                        with st.status("Connecting to server...",expanded=True) as status:
+                            st.write("This may take a moment if the server is waking up from sleep.")
+                            server_awake = False
+                            for i in range(15):
+                                try:
+                                    pulse = requests.get("https://datapilot-ai-cug8.onrender.com/",timeout=5)
+                                    if pulse.status_code == 200:
+                                        server_awake = True
+                                        break
+                                except requests.exceptions.RequestException:
+                                    pass
+                                status.update(label=f"Cloud server is waking up... ({i+1}/15) attempts",state="running")
+                                time.sleep(5)
+                            if not server_awake:
+                                status.update(label="Server waking-up timed out.", state="error")
+                                st.error("Login failed due to server timeout. The server may be waking up from sleep. Please wait a moment and try again.")
+                            else:
+                                status.update(label="Server is awake! Attempting to log in...", state="running")
+                                st.write("Sending login request...")
+                            
+                                try:
+                                    response = requests.post(LOGIN_URL, data={"username": username, "password": password}, timeout=60)
+                                    if response.status_code in [502,503]:
+                                        st.warning("The cloud server is currently waking up from sleep. Please wait 1 minute and click Login again!")
+                                    elif response.status_code == 200:
+                                        st.success("Login successful!")
+                                        st.session_state.access_token = response.json().get("access_token")
+                                        st.rerun()
+                                    else:
+                                        error_details = response.json().get("detail", "Login failed.")
+                                        st.error(error_details)
+                                except requests.exceptions.ReadTimeout:
+                                    st.error("Login timed out. The server may be waking up from sleep. Please wait a moment and try again.")
+                                except requests.exceptions.JSONDecodeError:
+                                    st.error(f"Server Error. Raw Response: {response.text[:100]}")
+                                except requests.exceptions.ConnectionError:
+                                    st.error("Could not connect to the backend server. Is your server running?")
                             
             with tab_register:
                 with st.form("register_form"):
