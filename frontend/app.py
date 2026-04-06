@@ -144,10 +144,11 @@ if not st.session_state.access_token:
                         with st.status("Connecting to server...",expanded=True) as status:
                             st.write("This may take a moment if the server is waking up from sleep.")
                             server_awake = False
+                            browser_header = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"}
                             for i in range(15):
                                 try:
-                                    pulse = requests.get("https://datapilot-ai-cug8.onrender.com/",timeout=5)
-                                    if pulse.status_code == 200:
+                                    pulse = requests.get("https://datapilot-ai-cug8.onrender.com/", headers=browser_header, timeout=10)
+                                    if pulse.status_code not in [502,503]:
                                         server_awake = True
                                         break
                                 except requests.exceptions.RequestException:
@@ -162,7 +163,7 @@ if not st.session_state.access_token:
                                 st.write("Sending login request...")
                             
                                 try:
-                                    response = requests.post(LOGIN_URL, data={"username": username, "password": password}, timeout=60)
+                                    response = requests.post(LOGIN_URL, data={"username": username, "password": password}, timeout=60, headers=browser_header)
                                     if response.status_code in [502,503]:
                                         st.warning("The cloud server is currently waking up from sleep. Please wait 1 minute and click Login again!")
                                     elif response.status_code == 200:
