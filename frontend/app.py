@@ -184,45 +184,44 @@ if not st.session_state.access_token:
                     new_username = st.text_input("Email Address")
                     new_password = st.text_input("Password", type="password")
                     if st.form_submit_button("Sign Up", type="primary", use_container_width=True):
-                        with st.spinner("Creating your account..."):
-                            try:
-                                response = requests.post(REGISTER_URL, json={"username": new_username, "password": new_password},timeout=60)
-                                if response.status_code == 201:
-                                    st.success("Account created successfully! You can now log in.")
-                                elif response.status_code in [502,503]:
-                                        st.warning("The cloud server is currently waking up from sleep. Please wait 1 minute and click Sign Up again!")
-                                else:
-                                    st.error(response.json().get("detail", "Registration failed."))
-                            except requests.exceptions.ReadTimeout:
-                                st.error("Registration timed out. The server may be waking up from sleep. Please wait a moment and try again.")
-                            except requests.exceptions.ConnectionError:
-                                st.error("Could not connect to the backend server. Is your server running?")
-                            except requests.exceptions.JSONDecodeError:
-                                st.error(f"Server Error. Raw Response: {response.text[:100]}")
+                        with st.status("Creating your account...",expanded=True) as status:
+                            st.write("This may take a moment if the server is waking up from sleep.")
+                            server_awake = False
+                            for i in range(15):
+                                try:
+                                    pulse = requests.get("https://datapilot-ai-cug8.onrender.com/",timeout=5)
+                                    if pulse.status_code == 200:
+                                        server_awake = True
+                                        break
+                                except requests.exceptions.RequestException:
+                                    pass
+                                status.update(label=f"Cloud server is waking up... ({i+1}/15) attempts",state="running")
+                                time.sleep(5)
+                            if not server_awake:
+                                status.update(label="Server waking-up timed out.", state="error")
+                                st.error("Registration failed due to server timeout. The server may be waking up from sleep. Please wait a moment and try again.")
+                            else:
+                                status.update(label="Server is awake! Attempting to register...", state="running")
+                                st.write("Sending registration request...")
+                                try:
+                                    response = requests.post(REGISTER_URL, json={"username": new_username, "password": new_password},timeout=60)
+                                    if response.status_code == 201:
+                                        st.success("Account created successfully! You can now log in.")
+                                    elif response.status_code in [502,503]:
+                                            st.warning("The cloud server is currently waking up from sleep. Please wait 1 minute and click Sign Up again!")
+                                    else:
+                                        st.error(response.json().get("detail", "Registration failed."))
+                                except requests.exceptions.ReadTimeout:
+                                    st.error("Registration timed out. The server may be waking up from sleep. Please wait a moment and try again.")
+                                except requests.exceptions.ConnectionError:
+                                    st.error("Could not connect to the backend server. Is your server running?")
+                                except requests.exceptions.JSONDecodeError:
+                                    st.error(f"Server Error. Raw Response: {response.text[:100]}")
 
 # ==========================================
 # 📊 MAIN DASHBOARD (Logged In)
 # ==========================================
 else:
-    # --- Sidebar (Navigation) ---
-    # with st.sidebar:
-    #     st.markdown("### Menu")
-    #     st.button("Home", width="stretch")
-        
-    #     if st.button("Database Insights", width="stretch"):
-    #         show_coming_soon("Database Insights")
-            
-    #     if st.button("Configurations", width="stretch"):
-    #         show_coming_soon("User Configurations")
-            
-    #     st.markdown("---")
-    #     st.caption("Current Configuration - gpt-35-turbo, 2000 rows")
-        
-    #     if st.button("Logout", width="stretch"):
-    #         st.session_state.access_token = None
-    #         st.session_state.messages = []
-    #         st.rerun()
-    # --- Sidebar (Navigation & Insights) ---
     with st.sidebar:
         st.markdown("### Menu")
         st.button("Home", width="stretch")
