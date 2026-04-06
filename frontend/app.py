@@ -3,10 +3,12 @@ import requests
 import pandas as pd
 import os
 import time
+from dotenv import load_dotenv
+load_dotenv()
 
 # --- Configuration ---
 # Ensure these match your FastAPI server routes!
-BASE_URL = os.getenv("BACKEND_URL", "http://127.0.0.1:8000/api/v1")
+BASE_URL = os.getenv("BACKEND_URL")
 API_URL = f"{BASE_URL}/query"
 LOGIN_URL = f"{BASE_URL}/login"
 REGISTER_URL = f"{BASE_URL}/register"
@@ -157,26 +159,26 @@ if not st.session_state.access_token:
                             # 1. API Wake-Up Call
                             status.update(label="Sending wake-up signal to Render...", state="running")
                             try:
-                                api_response=render_url = f"https://api.render.com/v1/services/{RENDER_SERVICE_ID}/resume"
-                                headers = {"Authorization": f"Bearer {RENDER_API_KEY}", "Content-Type": "application/json"}
-                                requests.post(render_url, headers=headers, timeout=5)
-                                if api_response.status_code == 200:
-                                    status.update(label="Wake-up signal sent successfully!", state="running")
+                                render_url = f"https://api.render.com/v1/services/{RENDER_SERVICE_ID}/resume"
+                                headers = {"Authorization": f"Bearer {RENDER_API_KEY}", "Accept": "application/json", "Content-Type": "application/json"}
+                                api_response=requests.post(render_url, headers=headers, timeout=10)
+                                if api_response.status_code in [200, 201,204,304]:
+                                    st.write("✅ Wake-up signal accepted by cloud infrastructure!")
                                 else:
-                                    st.write(f"⚠️ API signal returned status {api_response.status_code}, falling back to web ping...")
-                            except Exception:
-                                st.write("⚠️ API signal failed, falling back to web ping...")
+                                    st.error(f"⚠️ API signal returned status {api_response.status_code} - {api_response.text}")
+                            except Exception as e:
+                                st.error(f"API Network Crash: {str(e)}")
                             
                             # 2. Polling Loop
                             for i in range(30):
                                 try:
-                                    pulse = requests.get("https://datapilot-ai-cug8.onrender.com/docs", headers=browser_header, timeout=5)
-                                    if pulse.status_code == 200:
+                                    pulse = requests.get("https://datapilot-ai-cug8.onrender.com/", headers=browser_header, timeout=5)
+                                    if pulse.status_code == 200:  
                                         server_awake = True
                                         break
-                                except requests.exceptions.RequestException:
-                                    pass
-                                status.update(label=f"Cloud server is waking up... ({i+1}/15) attempts", state="running")
+                                except requests.exceptions.RequestException as e:
+                                    st.error(f"Web Ping Failed: {str(e)}")
+                                status.update(label=f"Cloud server is waking up... ({i+1}/30) attempts", state="running")
                                 time.sleep(5)
                             
                             # 3. Final Execution
@@ -212,10 +214,14 @@ if not st.session_state.access_token:
                             status.update(label="Sending wake-up signal to Render...", state="running")
                             try:
                                 render_url = f"https://api.render.com/v1/services/{RENDER_SERVICE_ID}/resume"
-                                headers = {"Authorization": f"Bearer {RENDER_API_KEY}", "Content-Type": "application/json"}
-                                requests.post(render_url, headers=headers, timeout=5)
+                                headers = {"Authorization": f"Bearer {RENDER_API_KEY}", "Content-Type": "application/json", "Accept": "application/json"}
+                                api_response=requests.post(render_url, headers=headers, timeout=10)
+                                if api_response.status_code in [200,204,201,304]:
+                                    st.write("✅ Wake-up signal accepted by cloud infrastructure!")
+                                else:
+                                    st.error(f"⚠️ API signal returned status {api_response.status_code} - {api_response.text}")
                             except Exception:
-                                pass
+                                st.error(f"API Network Crash: {str(e)}")
                             
                             # 2. Polling Loop
                             for i in range(15):
@@ -224,8 +230,8 @@ if not st.session_state.access_token:
                                     if pulse.status_code == 200:
                                         server_awake = True
                                         break
-                                except requests.exceptions.RequestException:
-                                    pass
+                                except requests.exceptions.RequestException as e:
+                                    st.error(f"Web Ping Failed: {str(e)}")
                                 status.update(label=f"Cloud server is waking up... ({i+1}/15) attempts", state="running")
                                 time.sleep(5)
                                 
