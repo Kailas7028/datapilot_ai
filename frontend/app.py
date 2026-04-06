@@ -136,6 +136,7 @@ if "messages" not in st.session_state:
 browser_header = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
 }
+headers = {**browser_header,"Authorization": f"Bearer {RENDER_API_KEY}", "Accept": "application/json", "Content-Type": "application/json"}
 
 if not st.session_state.access_token:
     st.write("<br><br><br>", unsafe_allow_html=True)
@@ -168,7 +169,7 @@ if not st.session_state.access_token:
                             status.update(label="Sending wake-up signal to Render...", state="running")
                             try:
                                 render_url = f"https://api.render.com/v1/services/{RENDER_SERVICE_ID}/resume"
-                                headers = {**browser_header,"Authorization": f"Bearer {RENDER_API_KEY}", "Accept": "application/json", "Content-Type": "application/json"}
+                                
                                 api_response=requests.post(render_url, headers=headers, timeout=10)
                                 if api_response.status_code in [200, 201,204,304]:
                                     st.write("✅ Wake-up signal accepted by cloud infrastructure!")
@@ -222,7 +223,7 @@ if not st.session_state.access_token:
                             status.update(label="Sending wake-up signal to Render...", state="running")
                             try:
                                 render_url = f"https://api.render.com/v1/services/{RENDER_SERVICE_ID}/resume"
-                                headers = {"Authorization": f"Bearer {RENDER_API_KEY}", "Content-Type": "application/json", "Accept": "application/json"}
+                                
                                 api_response=requests.post(render_url, headers=headers, timeout=10)
                                 if api_response.status_code in [200,204,201,304]:
                                     st.write("✅ Wake-up signal accepted by cloud infrastructure!")
@@ -382,8 +383,8 @@ else:
         with st.chat_message("assistant"):
             with st.spinner("Analyzing database schema and generating insights..."):
                 try:
-                    headers = {"Authorization": f"Bearer {st.session_state.access_token}"}
-                    response = requests.post(API_URL, json={"question": prompt}, headers=headers)
+                    query_headers = {"Authorization": f"Bearer {st.session_state.access_token}"}
+                    response = requests.post(API_URL, json={"question": prompt}, headers=query_headers)
                     
                     if response.status_code == 200:
                         api_data = response.json()
