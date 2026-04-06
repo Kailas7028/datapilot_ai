@@ -157,14 +157,18 @@ if not st.session_state.access_token:
                             # 1. API Wake-Up Call
                             status.update(label="Sending wake-up signal to Render...", state="running")
                             try:
-                                render_url = f"https://api.render.com/v1/services/{RENDER_SERVICE_ID}/resume"
+                                api_response=render_url = f"https://api.render.com/v1/services/{RENDER_SERVICE_ID}/resume"
                                 headers = {"Authorization": f"Bearer {RENDER_API_KEY}", "Content-Type": "application/json"}
                                 requests.post(render_url, headers=headers, timeout=5)
+                                if api_response.status_code == 200:
+                                    status.update(label="Wake-up signal sent successfully!", state="running")
+                                else:
+                                    st.write(f"⚠️ API signal returned status {api_response.status_code}, falling back to web ping...")
                             except Exception:
-                                pass # Fall back to polling if API fails
+                                st.write("⚠️ API signal failed, falling back to web ping...")
                             
                             # 2. Polling Loop
-                            for i in range(15):
+                            for i in range(30):
                                 try:
                                     pulse = requests.get("https://datapilot-ai-cug8.onrender.com/docs", headers=browser_header, timeout=5)
                                     if pulse.status_code == 200:
