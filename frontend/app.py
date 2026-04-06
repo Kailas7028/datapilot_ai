@@ -139,23 +139,45 @@ if not st.session_state.access_token:
                     username = st.text_input("Email Address", placeholder="name@company.com")
                     password = st.text_input("Password", type="password", placeholder="••••••••")
                     if st.form_submit_button("Sign In", type="primary", use_container_width=True):
-                        response = requests.post(LOGIN_URL, data={"username": username, "password": password})
-                        if response.status_code == 200:
-                            st.session_state.access_token = response.json().get("access_token")
-                            st.rerun()
-                        else:
-                            st.error("Invalid credentials.")
+                        with st.spinner("Connecting to backend... (May take 60s if waking from sleep)"):
+                            try:
+                                response = requests.post(LOGIN_URL, data={"username": username, "password": password}, timeout=60)
+                                if response.status_code in [502,503]:
+                                    st.warning("The cloud server is currently waking up from sleep. Please wait 1 minute and click Login again!")
+                                elif response.status_code == 200:
+                                    st.success("Login successful!")
+                                    st.session_state.access_token = response.json().get("access_token")
+                                    st.rerun()
+                                else:
+                                    error_details = response.json().get("detail", "Login failed.")
+                                    st.error(error_details)
+                            except requests.exceptions.ReadTimeout:
+                                st.error("Login timed out. The server may be waking up from sleep. Please wait a moment and try again.")
+                            except requests.exceptions.JSONDecodeError:
+                                st.error(f"Server Error. Raw Response: {response.text[:100]}")
+                            except requests.exceptions.ConnectionError:
+                                st.error("Could not connect to the backend server. Is your server running?")
                             
             with tab_register:
                 with st.form("register_form"):
                     new_username = st.text_input("Email Address")
                     new_password = st.text_input("Password", type="password")
                     if st.form_submit_button("Sign Up", type="primary", use_container_width=True):
-                        response = requests.post(REGISTER_URL, json={"username": new_username, "password": new_password})
-                        if response.status_code == 201:
-                            st.success("Account created successfully! You can now log in.")
-                        else:
-                            st.error(response.json().get("detail", "Registration failed."))
+                        with st.spinner("Creating your account..."):
+                            try:
+                                response = requests.post(REGISTER_URL, json={"username": new_username, "password": new_password},timeout=60)
+                                if response.status_code == 201:
+                                    st.success("Account created successfully! You can now log in.")
+                                elif response.status_code in [502,503]:
+                                        st.warning("The cloud server is currently waking up from sleep. Please wait 1 minute and click Sign Up again!")
+                                else:
+                                    st.error(response.json().get("detail", "Registration failed."))
+                            except requests.exceptions.ReadTimeout:
+                                st.error("Registration timed out. The server may be waking up from sleep. Please wait a moment and try again.")
+                            except requests.exceptions.ConnectionError:
+                                st.error("Could not connect to the backend server. Is your server running?")
+                            except requests.exceptions.JSONDecodeError:
+                                st.error(f"Server Error. Raw Response: {response.text[:100]}")
 
 # ==========================================
 # 📊 MAIN DASHBOARD (Logged In)
