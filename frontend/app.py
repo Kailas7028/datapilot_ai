@@ -19,6 +19,11 @@ REGISTER_URL = f"{BASE_URL}/register"
 # render api key
 RENDER_API_KEY = os.getenv("RENDER_API_KEY")
 RENDER_SERVICE_ID = os.getenv("RENDER_SERVICE_ID")
+# 🔍 DEBUG: Check if Render variables exist
+if not os.getenv("RENDER_API_KEY"):
+    st.error("DEBUG: RENDER_API_KEY is missing from Render Environment settings!")
+if not os.getenv("RENDER_SERVICE_ID"):
+    st.error("DEBUG: RENDER_SERVICE_ID is missing from Render Environment settings!")
 
 st.set_page_config(page_title="Datapilot AI Insights", page_icon="📊", layout="wide")
 
@@ -163,7 +168,7 @@ if not st.session_state.access_token:
                             status.update(label="Sending wake-up signal to Render...", state="running")
                             try:
                                 render_url = f"https://api.render.com/v1/services/{RENDER_SERVICE_ID}/resume"
-                                headers = {"Authorization": f"Bearer {RENDER_API_KEY}", "Accept": "application/json", "Content-Type": "application/json"}
+                                headers = {**browser_header,"Authorization": f"Bearer {RENDER_API_KEY}", "Accept": "application/json", "Content-Type": "application/json"}
                                 api_response=requests.post(render_url, headers=headers, timeout=10)
                                 if api_response.status_code in [200, 201,204,304]:
                                     st.write("✅ Wake-up signal accepted by cloud infrastructure!")
@@ -175,7 +180,7 @@ if not st.session_state.access_token:
                             # 2. Polling Loop
                             for i in range(30):
                                 try:
-                                    pulse = requests.get("https://datapilot-ai-cug8.onrender.com/", headers=browser_header, timeout=5)
+                                    pulse = requests.get("https://datapilot-ai-cug8.onrender.com/", headers=headers, timeout=5)
                                     if pulse.status_code == 200:  
                                         server_awake = True
                                         break
@@ -191,7 +196,7 @@ if not st.session_state.access_token:
                             else:
                                 status.update(label="Server is awake! Logging in...", state="running")
                                 try:
-                                    response = requests.post(LOGIN_URL, data={"username": username, "password": password}, timeout=60, headers=browser_header)
+                                    response = requests.post(LOGIN_URL, data={"username": username, "password": password}, timeout=60, headers=headers)
                                     if response.status_code == 200:
                                         status.update(label="Login successful!", state="complete")
                                         st.session_state.access_token = response.json().get("access_token")
@@ -229,7 +234,7 @@ if not st.session_state.access_token:
                             # 2. Polling Loop
                             for i in range(15):
                                 try:
-                                    pulse = requests.get("https://datapilot-ai-cug8.onrender.com/docs", headers=browser_header, timeout=5)
+                                    pulse = requests.get("https://datapilot-ai-cug8.onrender.com/docs", headers=headers, timeout=5)
                                     if pulse.status_code == 200:
                                         server_awake = True
                                         break
@@ -245,7 +250,7 @@ if not st.session_state.access_token:
                             else:
                                 status.update(label="Server is awake! Creating account...", state="running")
                                 try:
-                                    response = requests.post(REGISTER_URL, json={"username": new_username, "password": new_password}, timeout=60, headers=browser_header)
+                                    response = requests.post(REGISTER_URL, json={"username": new_username, "password": new_password}, timeout=60, headers=headers)
                                     if response.status_code == 201:
                                         status.update(label="Account created!", state="complete")
                                         st.success("Account created successfully! You can now log in.")
