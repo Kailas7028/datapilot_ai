@@ -155,8 +155,7 @@ if not st.session_state.access_token:
                     if st.form_submit_button("Sign In", type="primary", use_container_width=True):
                         with st.status("Authenticating...", expanded=True) as status:
                             try:
-                                headers={"Accept": "application/json", "Content-Type": "application/json"}
-                                response = requests.post(LOGIN_URL, data={"username": username, "password": password}, timeout=60, headers=headers)
+                                response = requests.post(LOGIN_URL, data={"username": username, "password": password}, timeout=60)
                                 if response.status_code == 200:
                                     status.update(label="Login successful!", state="complete")
                                     st.session_state.access_token = response.json().get("access_token")
