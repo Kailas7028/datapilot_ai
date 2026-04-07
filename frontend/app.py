@@ -16,23 +16,16 @@ API_URL = f"{BASE_URL}/query"
 LOGIN_URL = f"{BASE_URL}/login"
 REGISTER_URL = f"{BASE_URL}/register"
 
-# render api key
-RENDER_API_KEY = os.getenv("RENDER_API_KEY")
-RENDER_SERVICE_ID = os.getenv("RENDER_SERVICE_ID")
-# 🔍 DEBUG: Check if Render variables exist
-if not os.getenv("RENDER_API_KEY"):
-    st.error("DEBUG: RENDER_API_KEY is missing from Render Environment settings!")
-if not os.getenv("RENDER_SERVICE_ID"):
-    st.error("DEBUG: RENDER_SERVICE_ID is missing from Render Environment settings!")
 
-st.set_page_config(page_title="Datapilot AI Insights", page_icon="📊", layout="wide")
 
+st.set_page_config(page_title="Datapilot AI Insights", page_icon="page_icon.png", layout="wide")
+#set background image
 # --- UI Helper: Coming Soon Notification ---
 def show_coming_soon(feature_name):
     """Displays a sleek popup for features currently in development."""
     st.toast(f"🚧 **{feature_name}** is currently in development. Coming soon!", icon="⏳")
 
-# --- CSS Injection (Minimalist OLED Polish) ---
+# --- CSS Injection 
 # --- ONE MASTER CSS INJECTION ---
 st.markdown("""
     <style>
@@ -119,6 +112,9 @@ st.markdown("""
         color: #EDEDED !important;
         border-bottom: 2px solid #0070F3 !important;
     }
+    .st-emotion-cache-1ejdgh8 {
+    background-color: #0070F3 !important;
+    }
  
     </style>
 """, unsafe_allow_html=True)
@@ -133,18 +129,13 @@ if "messages" not in st.session_state:
 # 🔒 THE DRIBBBLE-STYLE LOGIN PAGE
 # ==========================================
 
-browser_header = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-}
-headers = {**browser_header,"Authorization": f"Bearer {RENDER_API_KEY}", "Accept": "application/json", "Content-Type": "application/json"}
-
 if not st.session_state.access_token:
     st.write("<br><br><br>", unsafe_allow_html=True)
     
     left_brand, spacer, right_form = st.columns([1.2, 0.2, 1])
     
     with left_brand:
-        st.markdown("<h1 style='font-size: 3.5rem; color: #ffffff;'>Datapilot AI<br>Insights.</h1>", unsafe_allow_html=True)
+        st.markdown("<h1 style='font-size: 3.5rem; color: #ffffff;'>Datapilot AI<br>Insights</h1>", unsafe_allow_html=True)
         st.markdown("<p style='font-size: 1.2rem; color: #a0a0a0;'>Unlock the power of your data with conversational AI.<br>Secure, fast, and intelligent.</p>", unsafe_allow_html=True)
         
         if st.button("Read the Documentation", key="doc_btn"):
@@ -162,52 +153,20 @@ if not st.session_state.access_token:
                     password = st.text_input("Password", type="password", placeholder="••••••••")
 
                     if st.form_submit_button("Sign In", type="primary", use_container_width=True):
-                        with st.status("Connecting to backend...", expanded=True) as status:
-                            server_awake = False
-                            
-                            # 1. API Wake-Up Call
-                            status.update(label="Sending wake-up signal to Render...", state="running")
+                        with st.status("Authenticating...", expanded=True) as status:
                             try:
-                                render_url = f"https://api.render.com/v1/services/{RENDER_SERVICE_ID}/resume"
-                                
-                                api_response=requests.post(render_url, headers=headers, timeout=10)
-                                if api_response.status_code in [200, 201,204,304]:
-                                    st.write("✅ Wake-up signal accepted by cloud infrastructure!")
+                                headers={"Accept": "application/json", "Content-Type": "application/json"}
+                                response = requests.post(LOGIN_URL, data={"username": username, "password": password}, timeout=60, headers=headers)
+                                if response.status_code == 200:
+                                    status.update(label="Login successful!", state="complete")
+                                    st.session_state.access_token = response.json().get("access_token")
+                                    st.rerun()
                                 else:
-                                    st.error(f"⚠️ API signal returned status {api_response.status_code} - {api_response.text}")
+                                    status.update(label="Login failed.", state="error")
+                                    st.error(response.json().get("detail", "Login failed."))
                             except Exception as e:
-                                st.error(f"API Network Crash: {str(e)}")
-                            
-                            # 2. Polling Loop
-                            for i in range(30):
-                                try:
-                                    pulse = requests.get("https://datapilot-ai-cug8.onrender.com/", headers=headers, timeout=5)
-                                    if pulse.status_code == 200:  
-                                        server_awake = True
-                                        break
-                                except requests.exceptions.RequestException as e:
-                                    st.error(f"Web Ping Failed: {str(e)}")
-                                status.update(label=f"Cloud server is waking up... ({i+1}/30) attempts", state="running")
-                                time.sleep(5)
-                            
-                            # 3. Final Execution
-                            if not server_awake:
-                                status.update(label="Server wake-up timed out.", state="error")
-                                st.error("Login failed due to server timeout. Please try again.")
-                            else:
-                                status.update(label="Server is awake! Logging in...", state="running")
-                                try:
-                                    response = requests.post(LOGIN_URL, data={"username": username, "password": password}, timeout=60, headers=headers)
-                                    if response.status_code == 200:
-                                        status.update(label="Login successful!", state="complete")
-                                        st.session_state.access_token = response.json().get("access_token")
-                                        st.rerun()
-                                    else:
-                                        status.update(label="Login failed.", state="error")
-                                        st.error(response.json().get("detail", "Login failed."))
-                                except Exception as e:
-                                    status.update(label="Connection Error", state="error")
-                                    st.error(f"Something went wrong: {str(e)}")
+                                status.update(label="Connection Error", state="error")
+                                st.error(f"Something went wrong: {str(e)}")
 
             # --- TAB 2: REGISTER ---
             with tab_register:
@@ -217,50 +176,17 @@ if not st.session_state.access_token:
                     
                     if st.form_submit_button("Sign Up", type="primary", use_container_width=True):
                         with st.status("Preparing registration...", expanded=True) as status:
-                            server_awake = False
-                            
-                            # 1. API Wake-Up Call
-                            status.update(label="Sending wake-up signal to Render...", state="running")
                             try:
-                                render_url = f"https://api.render.com/v1/services/{RENDER_SERVICE_ID}/resume"
-                                
-                                api_response=requests.post(render_url, headers=headers, timeout=10)
-                                if api_response.status_code in [200,204,201,304]:
-                                    st.write("✅ Wake-up signal accepted by cloud infrastructure!")
+                                headers={"Accept": "application/json", "Content-Type": "application/json"}
+                                response = requests.post(REGISTER_URL, json={"username": new_username, "password": new_password}, timeout=60, headers=headers)
+                                if response.status_code == 201:
+                                    st.success("Account created successfully! You can now log in.")
                                 else:
-                                    st.error(f"⚠️ API signal returned status {api_response.status_code} - {api_response.text}")
-                            except Exception:
-                                st.error(f"API Network Crash: {str(e)}")
-                            
-                            # 2. Polling Loop
-                            for i in range(15):
-                                try:
-                                    pulse = requests.get("https://datapilot-ai-cug8.onrender.com/docs", headers=headers, timeout=5)
-                                    if pulse.status_code == 200:
-                                        server_awake = True
-                                        break
-                                except requests.exceptions.RequestException as e:
-                                    st.error(f"Web Ping Failed: {str(e)}")
-                                status.update(label=f"Cloud server is waking up... ({i+1}/15) attempts", state="running")
-                                time.sleep(5)
-                                
-                            # 3. Final Execution
-                            if not server_awake:
-                                status.update(label="Server wake-up timed out.", state="error")
-                                st.error("Registration failed due to server timeout. Please try again.")
-                            else:
-                                status.update(label="Server is awake! Creating account...", state="running")
-                                try:
-                                    response = requests.post(REGISTER_URL, json={"username": new_username, "password": new_password}, timeout=60, headers=headers)
-                                    if response.status_code == 201:
-                                        status.update(label="Account created!", state="complete")
-                                        st.success("Account created successfully! You can now log in.")
-                                    else:
-                                        status.update(label="Registration failed.", state="error")
-                                        st.error(response.json().get("detail", "Registration failed."))
-                                except Exception as e:
-                                    status.update(label="Connection Error", state="error")
-                                    st.error(f"Something went wrong: {str(e)}")
+                                    status.update(label="Registration failed.", state="error")
+                                    st.error(response.json().get("detail", "Registration failed."))
+                            except Exception as e:
+                                status.update(label="Connection Error", state="error")
+                                st.error(f"Something went wrong: {str(e)}")
 
 # ==========================================
 # 📊 MAIN DASHBOARD (Logged In)
