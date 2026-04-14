@@ -1,33 +1,26 @@
-from app.db import get_connection
+from app.db import get_connection, release_connection
 import logging
-
+from  psycopg2 import extras
 logger = logging.getLogger(__name__)
 
 def execute_sql(sql: str):
-    # 1. First line of defense: String validation
-    # This instantly blocks DROP, DELETE, UPDATE, INSERT before they even reach the DB.
-    if not sql.strip().upper().startswith("SELECT"):
-        raise ValueError("Security Alert: Only SELECT queries are permitted.")
-
+    
+    # Get a connection from the pool
     conn = get_connection()
     
-    # 2. Second line of defense: Read-Only Transaction
-    # If your driver supports it, force the database to reject writes.
+    # Set the connection to read-only mode to prevent any accidental writes
     conn.set_session(readonly=True, autocommit=True) 
-    
-    cursor = conn.cursor()
+    # Create a cursor for executing the SQL
+    cursor = conn.cursor(cursor_factory=extras.RealDictCursor)
 
     try:
         logger.info(f"Executing SQL: {sql}")
         cursor.execute(sql)
         
-        # Since we enforced SELECT only, we know there will be a description
         if cursor.description:  
             result = cursor.fetchall()
         else:
             result = []
-
-        # We REMOVED conn.commit() entirely. We are only reading!
         
     except Exception as e:
         logger.error(f"Database execution failed: {e}")
@@ -35,7 +28,9 @@ def execute_sql(sql: str):
         conn.rollback() 
         raise e
     finally:
-        cursor.close()
-        conn.close()
+        #close the cursor and release the connection back to the pool
+        if "cursor" in locals():
+            cursor.close()
+        release_connection(conn)
 
     return result

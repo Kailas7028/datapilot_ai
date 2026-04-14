@@ -7,7 +7,9 @@ FORBIDDEN_KEYWORDS = {
     "DROP",
     "ALTER",
     "TRUNCATE",
-    "CREATE"
+    "CREATE",
+    "GRANT",
+    "REVOKE"
 }
 
 ALLOWED_START = ("SELECT", "WITH")

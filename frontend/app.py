@@ -3,6 +3,10 @@ import requests
 import pandas as pd
 import os
 import time
+import uuid
+import pandas as pd
+import plotly.express as px
+
 try:
     from dotenv import load_dotenv
     load_dotenv()
@@ -124,6 +128,14 @@ if "access_token" not in st.session_state:
     st.session_state.access_token = None
 if "messages" not in st.session_state:
     st.session_state.messages = []
+if "thread_id" not in st.session_state:
+    st.session_state.thread_id = str(uuid.uuid4())  # Unique ID for this session/thread
+if "query_data" not in st.session_state:
+    st.session_state.query_data = None
+if "status" not in st.session_state:
+    st.session_state.status = None
+if "counter" not in st.session_state:
+    st.session_state.counter = 0
 
 # ==========================================
 # 🔒 THE DRIBBBLE-STYLE LOGIN PAGE
@@ -152,7 +164,7 @@ if not st.session_state.access_token:
                     username = st.text_input("Email Address", placeholder="name@company.com")
                     password = st.text_input("Password", type="password", placeholder="••••••••")
 
-                    if st.form_submit_button("Sign In", type="primary", use_container_width=True):
+                    if st.form_submit_button("Sign In", type="primary", width='stretch'):
                         with st.status("Authenticating...", expanded=True) as status:
                             try:
                                 response = requests.post(LOGIN_URL, data={"username": username, "password": password}, timeout=60)
@@ -173,7 +185,7 @@ if not st.session_state.access_token:
                     new_username = st.text_input("Email Address")
                     new_password = st.text_input("Password", type="password")
                     
-                    if st.form_submit_button("Sign Up", type="primary", use_container_width=True):
+                    if st.form_submit_button("Sign Up", type="primary", width='stretch'):
                         with st.status("Preparing registration...", expanded=True) as status:
                             try:
                                 headers={"Accept": "application/json", "Content-Type": "application/json"}
@@ -191,78 +203,61 @@ if not st.session_state.access_token:
 # 📊 MAIN DASHBOARD (Logged In)
 # ==========================================
 else:
+    # 1. Inject custom HTML/CSS
+    custom_css = """
+    <style>
+        /* Create a fixed container for the app title */
+        .fixed-header {
+            position: fixed;
+            top: 14px; /* Adjust vertical alignment */
+            left: 320px; /* Adjust horizontal alignment to sit next to the sidebar toggle */
+            z-index: 999999; /* Ensure it stays on top of other elements */
+            font-family: 'Inter', sans-serif; /* Streamlit's default font style */
+        }
+        
+        /* Style the text itself */
+        .app-title {
+            font-size: 20px;
+            font-weight: 600;
+            color: inherit; /* Inherits color from current theme (dark/light) */
+            margin: 0;
+        }
+    </style>
+
+    <div class="fixed-header">
+        <p class="app-title">Datapilot</p>
+    </div>
+    """
+
+    # Render the HTML
+    st.markdown(custom_css, unsafe_allow_html=True)
     with st.sidebar:
         st.markdown("### Menu")
         st.button("Home", width="stretch")
         
         if st.button("Configurations", width="stretch"):
             show_coming_soon("User Configurations")
-            
-        st.markdown("---")
-        
-        # ==========================================
-        # 🔍 DATA INSIGHTS SECTION
-        # ==========================================
-        st.markdown("### Data Insights")
-        
-        # 1. Data Health Indicators
-        st.caption("🟢 **Status:** Connected to 'airbnb_india_db'")
-        st.caption("📊 **Total Records:** 25 rows synced")
-        
-        st.write("") # Small spacer
-        
-        # 2. Table Schema Explorer
-        st.markdown("**Schema Explorer**")
-        
-        with st.expander("📂 hosts (5 rows)"):
-            st.markdown("""
-            - `id` *(integer)*
-            - `host_name` *(varchar)*
-            - `host_since` *(date)*
-            - `host_location` *(varchar)*
-            - `is_superhost` *(boolean)*
-            """)
-            
-        with st.expander("📂 listings (8 rows)"):
-            st.markdown("""
-            - `id` *(integer)*
-            - `name` *(text)*
-            - `host_id` *(integer, FK)*
-            - `neighbourhood` *(varchar)*
-            - `property_type` *(varchar)*
-            - `room_type` *(varchar)*
-            - `accommodates` *(integer)*
-            - `price_per_night` *(numeric)*
-            - `average_rating` *(numeric)*
-            """)
-            
-        with st.expander("📂 reviews (12 rows)"):
-            st.markdown("""
-            - `id` *(integer)*
-            - `listing_id` *(integer, FK)*
-            - `review_date` *(date)*
-            - `comments` *(text)*
-            """)
-
-        st.markdown("---")
+        if st.button("Data Insights", width="stretch"):
+            show_coming_soon("Data Insights")
 
         st.write("<br><br>", unsafe_allow_html=True) # Push logout to bottom
         if st.button("Logout", width="stretch"):
             st.session_state.access_token = None
+            st.session_state.thread_id = None
             st.session_state.messages = []
             st.rerun()
     # --- Top Action Bar ---
  # --- Top Action Bar (Right Aligned) ---
 # [4, 1, 1, 1] means the first column takes 4x more space, pushing others right
-    spacer, col_share, col_exit, col_delete = st.columns([4, 0.5, 0.5, 0.5])
-
+    spacer, col_share,col_delete = st.columns([4, 0.5,0.5])
+    
     with col_share:
         if st.button("Share"): 
             show_coming_soon("Session Sharing")
 
-    with col_exit:
-        if st.button("Exit"): 
-            show_coming_soon("Exit Session")
+    # with col_exit:
+    #     if st.button("Exit"): 
+    #         show_coming_soon("Exit Session")
 
     with col_delete:
         if st.button("Delete"): 
@@ -271,8 +266,8 @@ else:
 
     st.markdown("<hr style='margin-top: 0; border: 0.5px solid #222;'>", unsafe_allow_html=True)
     # --- Main Chat Interface ---
-    st.markdown("## Datspilot AI Insights")
-    st.write("Welcome to your secure workspace. Start typing below to query your database.")
+    # st.markdown("## Datapilot")
+    
 
     # --- Render Sample Questions (Only if chat is empty) ---
     if not st.session_state.messages:
@@ -282,23 +277,135 @@ else:
             if st.button("Average price of Villas vs Apartments", width="stretch"):
                 st.toast("Copy and paste this into the chat below!", icon="💡")
 
+
+
     # --- Render Chat History ---
-    for msg in st.session_state.messages:
+    for i, msg in enumerate(st.session_state.messages):
         with st.chat_message(msg["role"]):
             if msg["role"] == "user":
                 st.write(msg["content"])
             else:
-                tabs = st.tabs(["Insights", "Data", "Code", "Visualizations", "Lineage"])
+                # Render the tabs directly inside the chat history loop!
+                tabs = st.tabs(["Insights", "Data", "Code", "Visualizations"])
+                
                 with tabs[0]: st.write(msg.get("insight", "Query executed successfully."))
-                with tabs[1]: st.dataframe(msg.get("data", []), width="stretch")
+                
+                with tabs[1]: 
+                    df = msg.get("df")
+                    if df is not None and not df.empty:
+                        st.dataframe(df, width="stretch")
+                    else:
+                        st.info("No tabular data returned.")
+                        
                 with tabs[2]: st.code(msg.get("sql", "-- No SQL provided"), language="sql")
-                with tabs[3]: st.info("Visualization engine coming soon.")
-                with tabs[4]: st.caption("Data Lineage tracking not enabled.")
+                
+                # with tabs[3]: 
+                #     viz_config = msg.get("viz_config", {})
+                #     charts = viz_config.get("suggested_visualizations", []) if viz_config else []
+                    
+                #     if not charts:
+                #         st.info("No visualizations recommended for this specific data shape.")
+                #     else:
+                #         chart_options = {c["chart_id"]: f"{c['title']} ({c['chart_type'].title()})" for c in charts}
+                #         default_id = next((c["chart_id"] for c in charts if c["is_primary"]), charts[0]["chart_id"])
+                        
+                #         # CRITICAL FIX: Add a unique key using the loop index (i)
+                #         selected_chart_id = st.radio(
+                #             "Explore different views:", 
+                #             options=list(chart_options.keys()), 
+                #             format_func=lambda x: chart_options[x],
+                #             horizontal=True,
+                #             index=list(chart_options.keys()).index(default_id),
+                #             key=f"chart_radio_{i}" 
+                #         )
+                        
+                #         active_chart = next(c for c in charts if c["chart_id"] == selected_chart_id)
+                #         st.caption(active_chart["description"])
+                        
+                #         try:
+                #             ctype = active_chart["chart_type"]
+                #             c_col = active_chart.get("color_column")
+                #             # Plotly Routing
+                #             if ctype == "bar":
+                #                 fig = px.bar(df, x=active_chart["x_axis"], y=active_chart["y_axis"], color=c_col)
+                #             elif ctype == "line":
+                #                 fig = px.line(df, x=active_chart["x_axis"], y=active_chart["y_axis"], markers=True, color=c_col)
+                #             elif ctype == "pie":
+                #                 fig = px.pie(df, names=active_chart["x_axis"], values=active_chart["y_axis"], color=c_col)
+                #             elif ctype == "scatter":
+                #                 fig = px.scatter(df, x=active_chart["x_axis"], y=active_chart["y_axis"], color=c_col)
+                #             elif ctype == "area":
+                #                 fig = px.area(df, x=active_chart["x_axis"], y=active_chart["y_axis"], color=c_col)
+                #             else:
+                #                 fig = None
+                #                 st.warning(f"Unsupported chart type: {ctype}")
+                                
+                #             if fig:
+                #                 st.plotly_chart(fig, width='stretch', key=f"plotly_{i}")
+                                
+                #         except Exception as e:
+                #             st.error(f"Graph rendering error: {e}")
+                with tabs[3]: 
+                    st.markdown("#### Playgraph")
+                    
+                    df = msg.get("df")
+                    if df is None or df.empty:
+                        st.info("No data available to visualize.")
+                    else:
+                        # 1. Get the AI's default suggestion (if it exists)
+                        viz_config = msg.get("viz_config", {})
+                        charts = viz_config.get("suggested_visualizations", []) if viz_config else []
+                        default_chart = charts[0] if charts else {"chart_type": "bar", "x_axis": df.columns[0], "y_axis": df.columns[0]}
+                        
+                        # 2. Build the UI Controls in a single row
+                        ctrl1, ctrl2, ctrl3, ctrl4 = st.columns(4)
+                        
+                        all_columns = df.columns.tolist()
+                        chart_types = ["bar", "line", "scatter", "area", "pie"]
+                        
+                        # Ensure defaults are valid (fallback to index 0 if LLM hallucinated)
+                        def_type_idx = chart_types.index(default_chart.get("chart_type", "bar")) if default_chart.get("chart_type") in chart_types else 0
+                        def_x_idx = all_columns.index(default_chart.get("x_axis")) if default_chart.get("x_axis") in all_columns else 0
+                        def_y_idx = all_columns.index(default_chart.get("y_axis")) if default_chart.get("y_axis") in all_columns else 0
+                        
+                        with ctrl1:
+                            c_type = st.selectbox("Chart Type", chart_types, index=def_type_idx, key=f"type_{i}")
+                        with ctrl2:
+                            x_col = st.selectbox("X-Axis", all_columns, index=def_x_idx, key=f"x_{i}")
+                        with ctrl3:
+                            y_col = st.selectbox("Y-Axis", all_columns, index=def_y_idx, key=f"y_{i}")
+                        with ctrl4:
+                            # Color is optional, add "None" to the start of the list
+                            color_options = ["None"] + all_columns
+                            color_col = st.selectbox("Group By (Color)", color_options, index=0, key=f"color_{i}")
+
+                        # 3. Dynamic Plotly Rendering Engine
+                        try:
+                            # Set color to actual None if user selected the "None" string
+                            plot_color = None if color_col == "None" else color_col
+                            
+                            if c_type == "bar":
+                                fig = px.bar(df, x=x_col, y=y_col, color=plot_color)
+                            elif c_type == "line":
+                                fig = px.line(df, x=x_col, y=y_col, color=plot_color, markers=True)
+                            elif c_type == "scatter":
+                                fig = px.scatter(df, x=x_col, y=y_col, color=plot_color)
+                            elif c_type == "area":
+                                fig = px.area(df, x=x_col, y=y_col, color=plot_color)
+                            elif c_type == "pie":
+                                fig = px.pie(df, names=x_col, values=y_col)
+                                
+                            st.plotly_chart(fig, width='stretch', key=f"plot_{i}")
+                            
+                        except Exception as e:
+                            st.warning("⚠️ This combination of columns cannot be rendered as this chart type. Try selecting different axes.")
 
     # --- User Input Bar ---
     prompt = st.chat_input("Type your question here or type an SQL query to run...")
 
     if prompt:
+        # Clear old query response
+        st.session_state.query_data = None
         # 1. Display User Message instantly
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
@@ -309,38 +416,115 @@ else:
             with st.spinner("Analyzing database schema and generating insights..."):
                 try:
                     query_headers = {"Authorization": f"Bearer {st.session_state.access_token}"}
-                    response = requests.post(API_URL, json={"question": prompt}, headers=query_headers)
+                    payload = {
+                        "question": prompt,
+                        "thread_id": st.session_state.thread_id
+                    }
+                    response = requests.post(API_URL, json=payload, headers=query_headers)
                     
                     if response.status_code == 200:
                         api_data = response.json()
                         generated_sql = api_data.get("generated_sql", "-- SQL not found")
                         sql_results = api_data.get("result", [])
                         insight_text = api_data.get("result_summary", "No insights generated.")
-                        # ---> ADD THIS LINE <---
-                        insight_text = insight_text.replace("$", r"\$")
-                        
-                        # Display response in tabs
-                        tabs = st.tabs(["Insights", "Data", "Code", "Visualizations", "Lineage"])
-                        with tabs[0]: st.write(insight_text)
-                        with tabs[1]: st.dataframe(sql_results, width="stretch")
-                        with tabs[2]: st.code(generated_sql, language="sql")
-                        with tabs[3]: st.info("Visualization engine coming soon.")
-                        with tabs[4]: st.caption("Data Lineage tracking not enabled.")
-                        
-                        # Save to chat history
+                        viz_config = api_data.get("viz_config",{})
+                        # Pre-build the DataFrame so we don't have to rebuild it on every Streamlit rerun
+                        df = pd.DataFrame(sql_results) if sql_results else None
+                        # Append the full payload to history
                         st.session_state.messages.append({
                             "role": "assistant",
                             "insight": insight_text,
                             "data": sql_results,
-                            "sql": generated_sql
+                            "df": df,
+                            "sql": generated_sql,
+                            "viz_config": viz_config
                         })
-                        
+                        st.rerun()
                     elif response.status_code == 401:
                         st.error("Session expired. Please log in again.")
                         st.session_state.access_token = None
                         st.rerun()
                     else:
                         st.error(f"API Error {response.status_code}: {response.text}")
-                
+                                
                 except requests.exceptions.ConnectionError:
                     st.error("🚨 Could not connect to the backend API. Is your FastAPI server running on port 8000?")
+    # if st.session_state.status == 200 and st.session_state.counter ==0 :  
+    
+    #     # Display response in tabs
+    #     tabs = st.tabs(["Insights", "Data", "Code", "Visualizations", "Lineage"])
+
+    #     #===============================
+    #     # TAB 0 DATA INSIGHTS
+    #     with tabs[0]: st.write(insight_text)
+
+    #     #==============================
+    #     #TAB SQL RESULT OR DATA
+    #     with tabs[1]: 
+    #         st.dataframe(sql_results, width="stretch")
+    #         df = pd.DataFrame(sql_results)
+
+    #     #=============================
+    #     # TAB 2 SQL CODE
+    #     with tabs[2]: 
+    #     # Expandable SQL Code Block
+    #         st.code(generated_sql, language="sql")
+
+    #     #==============================
+    #     # TAB 3 VISUALIZATION
+    #     with tabs[3]:
+    #     # Check if we have visualization data
+    #         charts = viz_config.get("suggested_visualizations",[]) if viz_config else []
+    #         if not sql_results:
+    #             st.empty() # Do nothing if no data
+    #         elif not charts:
+    #             st.info("No visualizations recommended for this specific data shape.")
+    #         else:
+    #         # Create a dictionary for the radio buttons UI: { chart_id : "Title (Type)" }
+    #             chart_options = {c["chart_id"]: f"{c['title']} ({c['chart_type'].title()})" for c in charts}
+                                    
+    #             # Find the primary chart to set as default selected
+    #             default_id = next((c["chart_id"] for c in charts if c["is_primary"]), charts[0]["chart_id"])
+                                    
+    #             # The Interactive Radio Buttons
+    #             selected_chart_id = st.radio(
+    #                 "Explore different views:", 
+    #                 options=list(chart_options.keys()), 
+    #                 format_func=lambda x: chart_options[x],
+    #                 horizontal=True,
+    #                 index=list(chart_options.keys()).index(default_id)
+    #                 )
+                                    
+    #             # Grab the configuration for the currently selected chart
+    #             active_chart = next(c for c in charts if c["chart_id"] == selected_chart_id)
+                                    
+    #             st.caption(active_chart["description"])
+                                    
+    #             # Plotly Routing Engine
+    #             try:
+    #                 ctype = active_chart["chart_type"]
+    #                 # We use the DataFrame (df) we created earlier in col1
+                                        
+    #                 if ctype == "bar":
+    #                     fig = px.bar(df, x=active_chart["x_axis"], y=active_chart["y_axis"])
+    #                 elif ctype == "line":
+    #                     fig = px.line(df, x=active_chart["x_axis"], y=active_chart["y_axis"], markers=True)
+    #                 elif ctype == "pie":
+    #                     fig = px.pie(df, names=active_chart["x_axis"], values=active_chart["y_axis"])
+    #                 elif ctype == "scatter":
+    #                     fig = px.scatter(df, x=active_chart["x_axis"], y=active_chart["y_axis"])
+    #                 elif ctype == "area":
+    #                     fig = px.area(df, x=active_chart["x_axis"], y=active_chart["y_axis"])
+    #                 else:
+    #                     fig = None
+    #                     st.warning(f"Unsupported chart type: {ctype}")
+                                            
+    #                 # Draw the final graph!
+    #                 if fig:
+    #                     st.plotly_chart(fig, width='stretch')
+                                            
+    #             except Exception as e:
+    #                 st.error(f"Graph rendering error. Could not map X/Y axes to data: {e}")
+
+    #     with tabs[4]: st.caption("Data Lineage tracking not enabled.")
+                  

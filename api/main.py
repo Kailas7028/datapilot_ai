@@ -202,17 +202,17 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
 # Create the async endpoint
 @app.post("/api/v1/query", response_model=QueryResponse)
 async def ask_database(payload: QueryRequest, user: dict = Depends(get_current_user)):
-    logger.info(f"Received query: {payload.question}")
+    logger.info(f"Processig Query | Thread: {payload.thread_id} | question: {payload.question}")
     try:
         # Execute the LangGraph workflow
-        state_result = run_agent(payload.question)
-        
+        state_result = await run_agent(payload.question, thread_id=payload.thread_id)
         # Map the AgentState dictionary to the Pydantic response model
         return QueryResponse(
             question=payload.question,
-            generated_sql=state_result.get("generated_sql"),
-            result=state_result.get("result"),
-            result_summary=state_result.get("result_summary")
+            generated_sql= state_result.get("generated_sql"),
+            result= state_result.get("result"),
+            result_summary= state_result.get("result_summary"),
+            viz_config= state_result.get("viz_config")
         )
         
     except Exception as e:

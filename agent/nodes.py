@@ -1,42 +1,47 @@
 """ Agent nodes for handling different stages of the SQL generation and execution process """
 #sql generation node
-from llm.prompts import FEW_SHOT_COT_PROMPT, DATA_INSIGHT_PROMPT
-from llm.llm_provider import GroqLlamaProvider
+from llm.prompts import FEW_SHOT_COT_PROMPT, DATA_INSIGHT_PROMPT, VIZ_SYSTEM_PROMPT
+from llm.llm_provider import GroqLlamaProvider, VertexAIGeminiProvider
 from agent.state import AgentState
 from utils.loggers import get_logger
 from rag.pinecone_impl import PineconeWrapper
 import json
+from utils.utils import extract_pure_sql
+from app.sql_executor import execute_sql
+from app.sql_validator import validate_sql
 
 # Initialize logger
 logger = get_logger(__name__)
 #initialize retriever object
 retriever = PineconeWrapper()
-provider = GroqLlamaProvider()
+# Initialize LLM providers (you can swap these out as needed)
+gemini_engine = VertexAIGeminiProvider()
+
+groq_engine = GroqLlamaProvider()   #llama-3.1-8b-instant
 
 #sql generation node
 #---------------------------------------------------------
-def sql_generation_node(state: AgentState) -> AgentState:
+async def sql_generation_node(state: AgentState) -> AgentState:
     """
     Node for generating SQL from the question and schema prompt
     """
     try:
         logger.info(f"Generating SQL for the question: {state.get('question','')}")
-        response = provider.generate(prompt_template=FEW_SHOT_COT_PROMPT,schema = state.get("retrieved_docs",[]),question = state.get("question",""))
+        response = await gemini_engine.agenerate(prompt_template=FEW_SHOT_COT_PROMPT,schema = state.get("retrieved_docs",[]),question = state.get("question",""))
         input_tokens=response.usage_metadata.get("input_tokens", 0)
         output_tokens=response.usage_metadata.get("output_tokens", 0)
+        
         # 3. Clean the output (Replace the logic we lost from sql_agent)
-        raw_sql = response.content.strip()
+        raw_output = response.content
+
+        #check does llm returned list of blocks
+        if isinstance(raw_output, list):
+            raw_sql = raw_output[0].get("text", "")
+        else:
+            raw_sql = raw_output.strip()
         
         # Safely strip markdown if the LLM disobeys the prompt
-        if raw_sql.startswith("```sql"):
-            raw_sql = raw_sql[6:]
-        elif raw_sql.startswith("```"):
-            raw_sql = raw_sql[3:]
-            
-        if raw_sql.endswith("```"):
-            raw_sql = raw_sql[:-3]
-            
-        final_sql = raw_sql.strip()
+        final_sql = extract_pure_sql(raw_sql)
         
         # 4. Return the cleaned SQL back to the graph state
         
@@ -50,7 +55,6 @@ def sql_generation_node(state: AgentState) -> AgentState:
 
 #sql validation node
 #---------------------------------------------------------
-from app.sql_validator import validate_sql
 def sql_validation_node(state: AgentState) -> AgentState:
     """
     Node for validating the generated SQL
@@ -67,7 +71,6 @@ def sql_validation_node(state: AgentState) -> AgentState:
 #sql execution node
 #-----------------------------------------------------------
 
-from app.sql_executor import execute_sql
 def sql_execution_node(state: AgentState) -> AgentState:
     """
     Node for executing the validated SQL and storing the result
@@ -92,8 +95,8 @@ def retriever_node(state: AgentState) -> AgentState:
     Node for retrieving relevant documents from the vector store based on the question
     """
     logger.info("Retrieving relevant documents from vector store.")
-    results = retriever.search(query=state.get("question", ""), limit=2)
-    logger.info(f"Retriever returned {results}.")
+    results = retriever.search(query=state.get("question", ""), limit=5)
+    
     
     if not results:
         print("No results found!")
@@ -146,11 +149,13 @@ def retriever_node(state: AgentState) -> AgentState:
         formatted_tables.append(f"{schema_ddl}")
 
     logger.info(f"Retrieved {len(formatted_tables)} relevant documents.")
+    #logger.debug(f"Formatted table schemas for LLM:\n{formatted_tables}")
     return {"retrieved_docs": formatted_tables}
+
 
 # result summarization node
 #------------------------------------------------
-def result_summarization_node(state: AgentState) -> AgentState:
+async def result_summarization_node(state: AgentState) -> AgentState:
     """
     Node for summarizing the SQL results into a human-readable answer
     """
@@ -158,10 +163,39 @@ def result_summarization_node(state: AgentState) -> AgentState:
     try:
         # THE FIX: Add default=str to safely cast Decimals, Dates, and UUIDs to strings
         safe_json = json.dumps(state.get("result",""), default=str)
-        response = provider.generate(prompt_template=DATA_INSIGHT_PROMPT, data_result=safe_json, sql_query=state.get("generated_sql", ""), question=state.get("question", ""))
+        response = await groq_engine.agenerate(prompt_template=DATA_INSIGHT_PROMPT, sql_result=safe_json, sql_query=state.get("generated_sql", ""), question=state.get("question", ""))
         summary = response.content.strip()
         logger.info("Result summarization successful.")
         return {"result_summary": summary, "error": None}
     except Exception as e:
         logger.error(f"Error occurred during result summarization: {str(e)}")
         return {"result_summary": None, "error": str(e)}
+    
+
+# Visualization config generation node (for generating chart config from SQL results)
+#---------------------------------------------
+
+async def visualization_recommender_node(state: AgentState):
+    results = state.get("result", [])
+    
+    # If no data returned, skip visualization
+    if not results:
+        return {"visualization_config": {"suggested_visualizations": []}}
+        
+    columns = list(results[0].keys())
+    sample_data = results[:3] 
+    
+    # Invoke the bound LLM (No JSON parsing required!)
+    try:
+        # This returns a validated Pydantic object
+        logger.info(f"Working on Visualisation Configuration..")
+        response_obj = await gemini_engine.quick_agenerate(prompt_template=VIZ_SYSTEM_PROMPT, columns=columns, sample_data=sample_data, question=state.get("question", ""))
+        
+        # Convert the Pydantic object back to a standard Python dictionary for the state
+        viz_config = response_obj.model_dump() 
+        logger.info(f"viz_config after model_dump: {viz_config}")
+    except Exception as e:
+        print(f"Failed to generate valid visualization schema: {e}")
+        viz_config = {"suggested_visualizations": []}
+        
+    return {"viz_config": viz_config}

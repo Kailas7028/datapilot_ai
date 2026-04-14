@@ -1,7 +1,7 @@
 from langgraph.graph import StateGraph, START, END
 from agent.state import AgentState
-from agent.nodes import sql_generation_node, sql_validation_node, sql_execution_node, retriever_node, result_summarization_node
-
+from agent.nodes import sql_generation_node, sql_validation_node, sql_execution_node, retriever_node, result_summarization_node, visualization_recommender_node
+from langgraph.checkpoint.memory import MemorySaver
 
 #should call sunnary agent
 def should_call(state: AgentState) -> bool:
@@ -22,6 +22,7 @@ workflow.add_node("sql_generation", sql_generation_node)
 workflow.add_node("sql_validation", sql_validation_node)   
 workflow.add_node("sql_execution", sql_execution_node)
 workflow.add_node("summary_agent", result_summarization_node)
+workflow.add_node("viz_node",visualization_recommender_node)
 # workflow.add_node("retry", retry_node)
 
 # Your edges remain exactly the same
@@ -31,6 +32,9 @@ workflow.add_edge("sql_generation", "sql_validation")
 workflow.add_edge("sql_validation","sql_execution")
 workflow.add_conditional_edges("sql_execution",should_call)
 workflow.add_edge("summary_agent", END)
+# workflow.add_edge("summary_agent", "viz_node")
+# workflow.add_edge("viz_node",END)
 
+memory = MemorySaver()
 
-app = workflow.compile()
+app = workflow.compile(checkpointer=memory)

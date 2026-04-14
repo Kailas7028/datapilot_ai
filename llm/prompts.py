@@ -1,78 +1,62 @@
 from langchain_core.prompts import ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate
 
-# ==========================================
-# PROMPT V1: THE BASIC ZERO-SHOT
-# (This is your current baseline)
-# ==========================================
-BASIC_SYSTEM = """You are a PostgreSQL expert. Your job is to translate the user's question into a valid PostgreSQL query.
-Here is the database schema:
-{schema}
+#==========================================
+# Prompts for SQL generation 
+#==========================================
 
-Only return the raw SQL query. Do not include markdown formatting or explanations.
-"""
+SQL_GENERATION_SYSTEM = r"""
+You are an expert PostgreSQL developer. Output ONLY raw, executable SQL.
 
-BASIC_PROMPT = ChatPromptTemplate.from_messages([
-    SystemMessagePromptTemplate.from_template(BASIC_SYSTEM),
-    HumanMessagePromptTemplate.from_template("Question: {question}.")
-])
+STRICT OUTPUT RULES:
+- Output ONLY SQL
+- No explanation, no comments, no markdown
+- Always SELECT all variables, entities, or names explicitly requested by the user so they appear in the final database results.
+- Always SELECT the aggregated metrics (COUNT, SUM, AVG, etc.) if they are used to ORDER or filter the data, and give them clear aliases.
+- Prioritize human-readable text columns (e.g., category names, city names, English translations) over raw primary keys/IDs in your SELECT statement, unless the user explicitly asks for the ID.
 
+SECURITY:
+- READ-ONLY only (SELECT, WITH, CASE)
+- No INSERT, UPDATE, DELETE, DROP, ALTER
 
-# ==========================================
-# PROMPT V2: THE RULE-BASED EXPERT
-# (Incorporating all the lessons we just learned)
-# ==========================================
-RULE_BASED_SYSTEM = """You are an elite PostgreSQL Data Analyst. 
-Write a highly optimized PostgreSQL query to answer the user's question based on this schema:
+SCHEMA RULES:
+- Use ONLY tables and columns from <postgresql_ddl>
+- Follow foreign key relationships strictly
 
-{schema}
+JOIN RULES:
+- NEVER use CROSS JOIN
+- ALWAYS use explicit JOIN ... ON ...
+- ONLY join related tables
+- Avoid unnecessary joins
 
-CRITICAL RULES OF ENGAGEMENT:
-1. STRICT SELECT: Only SELECT the exact columns asked for. If asked "Which feature...", return ONLY the feature name. Do not return counts or aggregations alongside it unless explicitly requested.
-2. NO RAW UUIDs: If asked for an entity (like organizations or users), JOIN to the parent table and return the human-readable 'name' or 'email'. Never return raw UUID foreign keys.
-3. SEMANTIC FREQUENCY: If asked for "most commonly", "most frequent", or "highest number", default to mathematical frequency using COUNT() and GROUP BY.
-4. SAFE AGGREGATIONS: Do not use Window Functions (PARTITION BY) for global platform metrics. Use standard GROUP BY, ORDER BY, and LIMIT.
-5. JSONB EXTRACTION: Use the `->>` operator for JSONB extraction only if a dedicated top-level column does not already exist.
+QUERY STRATEGY:
+- Prefer CTEs (WITH clauses) for multi-step problems
+- Break complex queries into smaller steps
+- Avoid large Cartesian operations
 
-Return ONLY the raw SQL. No markdown formatting, no backticks, no explanations.
-"""
+EFFICIENCY:
+- Generate minimal, efficient SQL
+- Avoid redundant columns or tables
 
-RULE_BASED_PROMPT = ChatPromptTemplate.from_messages([
-    SystemMessagePromptTemplate.from_template(RULE_BASED_SYSTEM),
-    HumanMessagePromptTemplate.from_template("Question: {question}")
-])
+LIMIT:
+- Add LIMIT 100 unless aggregation or top-N
 
-
-# ==========================================
-# PROMPT V3: FEW-SHOT CHAIN OF THOUGHT (CoT)
-# (The heaviest, most accurate pattern)
-# ==========================================
-FEW_SHOT_COT_SYSTEM = """You are an elite PostgreSQL Data Analyst.
-You will answer the user's question by writing a valid PostgreSQL query against the following schema:
-
-{schema}
-
-CRITICAL RULES:
-1. STRICT SELECT: Only SELECT the specific data requested. Do not include aggregation columns in the output to "show your work" unless asked.
-2. NO RAW UUIDs: Never return raw UUIDs unless explicitly asked. Always JOIN to get readable names/emails.
-3. SCHEMA TRUTH: Don't get fooled by users columns naming. If they want organization name then dont directly write "organization_name", check schema for actual column names and relations.
-4. PREVENT AMBIGUITY: Whenever you use a JOIN, you MUST prefix every single column name with its table name or alias (e.g., `invoices.amount` instead of just `amount`).
-
-=== EXAMPLES ===
-Question: Which 3 organizations have the highest number of users?
-Thought: The user wants organization names, not IDs. I need to join `users` to `organizations`. They only asked for the organizations, so my SELECT should ONLY contain `organizations.name`. I need to order by the count descending and limit to 3.
-SQL: SELECT organizations.name FROM users JOIN organizations ON users.organization_id = organizations.id GROUP BY organizations.name ORDER BY COUNT(users.id) DESC LIMIT 3
-
-Question: What is the most common device type for the login event?
-Thought: "Most common" means frequency, so I will use COUNT(). The user only wants the device type name in the output. I will filter by 'login', group by device_type, and order by count.
-SQL: SELECT device_type FROM events WHERE event_name = 'login' GROUP BY device_type ORDER BY COUNT(*) DESC LIMIT 1
-=== END EXAMPLES ===
-
-Return ONLY the raw SQL query. Do not output your 'Thought' process in the final response, just the SQL string. No markdown, no backticks.
+REASONING CONTROL:
+- Do NOT output or simulate reasoning
+- Do NOT explore multiple approaches
+- Generate final SQL directly
 """
 
 FEW_SHOT_COT_PROMPT = ChatPromptTemplate.from_messages([
-    SystemMessagePromptTemplate.from_template(FEW_SHOT_COT_SYSTEM),
-    HumanMessagePromptTemplate.from_template("Question: {question}")
+    SystemMessagePromptTemplate.from_template(SQL_GENERATION_SYSTEM),
+    HumanMessagePromptTemplate.from_template("""
+<postgresql_ddl>
+{schema}
+</postgresql_ddl>
+
+<user_question>
+{question}
+</user_question>
+""")
 ])
 
 
@@ -115,34 +99,92 @@ SUMMARY_PROMPT_TEMPLATE = ChatPromptTemplate.from_messages([
     HumanMessagePromptTemplate.from_template("Here is the schema information for a table:\n\n{table_info}\n\nPlease generate a summary now.")
 ])
 
-# ==========================================
-# PROMPT V4: DATA INSIGHT GENERATOR
-# (Used to summarize the SQL results into a human answer)
-# ==========================================
-DATA_INSIGHT_SYSTEM = """
-You are an elite Executive Data Analyst. 
-Your job is to answer the user's analytical question based strictly on the provided database results.
 
-<Rules>
-1. BE DIRECT: Do not use conversational filler like "Based on the data...", "Here are the results...", or "The query returned...". Just answer the question immediately.
-2. SYNTHESIZE, DON'T REPEAT: If the data contains multiple rows, find the narrative. Highlight the highest/lowest values, totals, or clear trends. Do not just blindly read the raw JSON back to the user.
-3. CONTEXTUALIZE: Use the original SQL query to understand exactly what metrics were pulled, but do NOT show the raw SQL to the user in your response.
-4. EMPTY RESULTS: If the provided data is empty or null, simply state that no records match the requested criteria in a polite, professional manner.
-5. FORMATTING: Keep it concise (2-4 sentences). Use bolding for key numbers or names to make them pop.
-</Rules>
+
+# ==========================================
+# Prompt for data insight generation (for SQL results)  
+# ==========================================
+
+DATA_INSIGHT_SYSTEM = """
+#ROLE AND OBJECTIVE:
+You are an Expert Data Analyst Agent.
+Your objective is to analyze SQL execution results and answer the user's analytical question.
+
+#TASK INSTRUCTIONS
+1. Analyze: Review the <user_question> and the <database_results>. 
+2. Summarize: Write a concise, business-ready summary answering the user's question.
+3. If the <database_results> contains a list of records, identify any trends, outliers, or key insights.
+4.If data is insuffic
+
+#OUTPUT FORMAT
+- If the results are empty, output exactly: "No records found in the database."
+- Otherwise, provide your summary in clean format (use bullet points).
+- DO NOT output JSON. 
+- DO NOT include the raw data array.
+- DO NOT include conversational filler like "Here is the summary" or "In this response...". Output ONLY the final analytical text.
 """
 
 DATA_INSIGHT_PROMPT = ChatPromptTemplate.from_messages([
     SystemMessagePromptTemplate.from_template(DATA_INSIGHT_SYSTEM),
     HumanMessagePromptTemplate.from_template("""
-User Question: {question}
+<user_question>
+{question}
+</user_question>
 
---- Context ---
-SQL Executed: {sql_query}
+<executed_sql_query>
+{sql_query}
+</executed_sql_query>
 
---- Data Results ---
-{data_result}
-
-Provide your executive insight now.
+<database_results>
+{sql_result}
+</database_results>
 """)
+])
+
+#=========================================
+# Visualization prompt template (for generating chart config from SQL results)
+#=========================================
+from langchain_core.prompts import ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate
+
+# VIZ_PROMPT_TEMPLATE = """You are an expert Data Visualization Architect.
+# Your objective is to analyze the provided data schema and recommend the best ways to visualize the results using Plotly Express.
+
+# RULES:
+# 1. The `chart_type` MUST be one of: "bar", "line", "pie", "scatter", or "area".
+# 2. Provide 1 to 3 visualization options. Set exactly one as `is_primary: true`.
+# 3. STRICT MAPPING: For `x_axis`, `y_axis`, and `color_column`, you MUST ONLY use the EXACT string values provided in the <data_columns_and_types> block.
+# 4. CRITICAL ANTI-HALLUCINATION: For `x_axis` and `y_axis`, you MUST ONLY use the EXACT string values provided in the <data_columns_and_types> block. 
+# 5. NEVER invent, guess, or assume column names. (e.g., do NOT output "count", "total", or "sum" unless that exact string is in the provided column list).
+# 6. Choose the chart type that makes the most mathematical sense based ONLY on the available columns.
+# 7. THE ESCAPE HATCH: You do NOT have to use every column. Select only the best columns for X, Y, and Color. Actively ignore raw ID columns if a human-readable text column is available.
+# 8. GROUPING (3D DATA): If the data requires grouping (e.g., comparing categories over time), map the human-readable text column to `color_column`.
+# """
+VIZ_PROMPT_TEMPLATE = """You are an AI Data Analyst configuring the default state for a user's interactive chart builder. 
+You will be given a list of database columns. The dataset may contain anywhere from 2 to 50 columns.
+
+YOUR OBJECTIVE: 
+Select the single best combination of columns to serve as the DEFAULT starting chart. 
+
+STRICT MAPPING RULES:
+1. Y-AXIS (Required): Find the primary numerical/aggregate metric (e.g., total_revenue, sales_count).
+2. X-AXIS (Required): Find the primary time or category dimension (e.g., sales_year, city).
+3. COLOR_COLUMN (Optional): Pick one human-readable text column for grouping (e.g., category_name). If none makes sense, leave it null.
+4. THE DISCARD RULE: You MUST ignore all other columns. Do not try to map them into your response.
+5. NO HALLUCINATIONS: You must use the EXACT string names provided in the <data_columns_and_types> block. Actively avoid mapping raw IDs (like order_id) unless absolutely necessary.
+"""
+
+VIZ_SYSTEM_PROMPT = ChatPromptTemplate.from_messages([
+    SystemMessagePromptTemplate.from_template(VIZ_PROMPT_TEMPLATE),
+    HumanMessagePromptTemplate.from_template("""
+<user_question>
+{question}
+</user_question>
+
+<data_columns_and_types>
+{columns}
+</data_columns_and_types>
+
+<data_sample_top_3_rows>
+{sample_data}
+</data_sample_top_3_rows>""")
 ])

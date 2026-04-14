@@ -8,7 +8,7 @@ from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel
 import uuid
 from utils.loggers import  user_id_var
-from app.db import get_connection  # Import your existing DB connection!
+from app.db import get_connection, release_connection 
 
 # --- Configuration ---
 SECRET_KEY = "your-super-secret-key-change-this-in-production"
@@ -72,9 +72,10 @@ def get_user_from_db(email: str):
         if row and row[2]: # Ensure the user actually has a password set!
             return {"id": row[0], "username": row[1], "hashed_password": row[2]}
         return None
+    
     finally:
         cursor.close()
-        conn.close()
+        release_connection(conn)
 
 def create_user_in_db(email: str, hashed_password: str):
     """Inserts a new user into your existing PostgreSQL table."""
@@ -103,4 +104,4 @@ def create_user_in_db(email: str, hashed_password: str):
         return False
     finally:
         cursor.close()
-        conn.close()
+        release_connection(conn)
