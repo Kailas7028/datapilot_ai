@@ -51,7 +51,7 @@ class VertexAIGeminiProvider(BaseLLM):
             model="gemini-2.5-flash",  # A smaller, faster model variant for quick checks
             temperature=0.0,
             max_output_tokens=1024,
-            project = config.GCP_PROJECT_ID
+            project = os.getenv("GCP_PROJECT_ID")
         ).with_structured_output(VisualizationConfig)
 
 
