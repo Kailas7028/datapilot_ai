@@ -167,7 +167,7 @@ if not st.session_state.access_token:
                     if st.form_submit_button("Sign In", type="primary", width='stretch'):
                         with st.status("Authenticating...", expanded=True) as status:
                             try:
-                                response = requests.post(LOGIN_URL, data={"username": username, "password": password}, timeout=60)
+                                response = requests.post(LOGIN_URL, data={"username": username, "password": password}, timeout=3.0)
                                 if response.status_code == 200:
                                     status.update(label="Login successful!", state="complete")
                                     st.session_state.access_token = response.json().get("access_token")
@@ -175,9 +175,29 @@ if not st.session_state.access_token:
                                 else:
                                     status.update(label="Login failed.", state="error")
                                     st.error(response.json().get("detail", "Login failed."))
+                            except requests.exceptions.ReadTimeout:
+                                # The server didn't reply instantly, which means it is waking up!
+                                try:
+                                    # 1. Update the spinning status box text directly!
+                                    status.update(label="Waking up Voxel's AI engines... (this takes ~45 seconds) ⏳", state="running")
+                                    # 2. Keep your toast as a nice pop-up alert
+                                    st.toast("⚠️ Server is waking up from sleep.", icon="⏳")
+                                    response = requests.post(LOGIN_URL, data={"username": username, "password": password}, timeout=60)
+                                    if response.status_code == 200:
+                                        status.update(label="Login successful!", state="complete")
+                                        st.session_state.access_token = response.json().get("access_token")
+                                        st.rerun()
+                                    else:
+                                        status.update(label="Login failed.", state="error")
+                                        st.error(response.json().get("detail", "Login failed."))
+                                except Exception as e:
+                                    status.update(label="Connection Error", state="error")
+                                    st.error(f"Something went wrong: {str(e)}")
+
                             except Exception as e:
                                 status.update(label="Connection Error", state="error")
                                 st.error(f"Something went wrong: {str(e)}")
+                            
 
             # --- TAB 2: REGISTER ---
             with tab_register:
@@ -189,12 +209,30 @@ if not st.session_state.access_token:
                         with st.status("Preparing registration...", expanded=True) as status:
                             try:
                                 headers={"Accept": "application/json", "Content-Type": "application/json"}
-                                response = requests.post(REGISTER_URL, json={"username": new_username, "password": new_password}, timeout=60, headers=headers)
+                                response = requests.post(REGISTER_URL, json={"username": new_username, "password": new_password}, timeout=3.0, headers=headers)
                                 if response.status_code == 201:
                                     st.success("Account created successfully! You can now log in.")
                                 else:
                                     status.update(label="Registration failed.", state="error")
                                     st.error(response.json().get("detail", "Registration failed."))
+                            except requests.exceptions.ReadTimeout:
+                                #handling cold start 
+                                try:
+                                    # 1. Update the spinning status box text directly!
+                                    status.update(label="Waking up Voxel's AI engines... (this takes ~45 seconds) ⏳", state="running")
+                                    # 2. Keep your toast as a nice pop-up alert
+                                    st.toast("⚠️ Server is waking up from sleep.", icon="⏳")
+                                    headers={"Accept": "application/json", "Content-Type": "application/json"}
+                                    response = requests.post(REGISTER_URL, json={"username": new_username, "password": new_password}, timeout=60, headers=headers)
+                                    if response.status_code == 201:
+                                        st.success("Account created successfully! You can now log in.")
+                                    else:
+                                        status.update(label="Registration failed.", state="error")
+                                        st.error(response.json().get("detail", "Registration failed."))
+                                except Exception as e:
+                                    status.update(label="Connection Error", state="error")
+                                    st.error(f"Something went wrong: {str(e)}")
+                                
                             except Exception as e:
                                 status.update(label="Connection Error", state="error")
                                 st.error(f"Something went wrong: {str(e)}")
