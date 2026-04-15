@@ -12,3 +12,5 @@ class AgentState(TypedDict):
     output_tokens: int
     result_summary: Optional[str]
     viz_config: Optional[dict]
+    router_decision : Optional[str]
+    data_insights: Optional[List[str]]

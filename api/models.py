@@ -26,3 +26,15 @@ class ChartConfig(BaseModel):
 
 class VisualizationConfig(BaseModel):
     suggested_visualizations: List[ChartConfig] = Field(description="List of 1 to 3 visualization options")
+
+
+# 1. The Pydantic Model for the Router LLM
+class RouteDecision(BaseModel):
+    decision: Literal["chat", "analytics"] = Field(
+        description="Route to 'chat' for greetings or general questions. Route to 'analytics' for data, reports, or database queries."
+    )
+
+# Pydantic Model for Summrizer
+class DataInsights(BaseModel):
+    summary : str = Field(description="A brief 1-2 sentence conversational answer to the user's question.")
+    key_insights: List[str] = Field(description="Exactly 3 bullet points highlighting trends, anomalies, or statistical facts from the data.")

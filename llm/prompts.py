@@ -142,23 +142,9 @@ DATA_INSIGHT_PROMPT = ChatPromptTemplate.from_messages([
 ])
 
 #=========================================
-# Visualization prompt template (for generating chart config from SQL results)
+# Visualization prompt for generating chart config from SQL results
 #=========================================
-from langchain_core.prompts import ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate
 
-# VIZ_PROMPT_TEMPLATE = """You are an expert Data Visualization Architect.
-# Your objective is to analyze the provided data schema and recommend the best ways to visualize the results using Plotly Express.
-
-# RULES:
-# 1. The `chart_type` MUST be one of: "bar", "line", "pie", "scatter", or "area".
-# 2. Provide 1 to 3 visualization options. Set exactly one as `is_primary: true`.
-# 3. STRICT MAPPING: For `x_axis`, `y_axis`, and `color_column`, you MUST ONLY use the EXACT string values provided in the <data_columns_and_types> block.
-# 4. CRITICAL ANTI-HALLUCINATION: For `x_axis` and `y_axis`, you MUST ONLY use the EXACT string values provided in the <data_columns_and_types> block. 
-# 5. NEVER invent, guess, or assume column names. (e.g., do NOT output "count", "total", or "sum" unless that exact string is in the provided column list).
-# 6. Choose the chart type that makes the most mathematical sense based ONLY on the available columns.
-# 7. THE ESCAPE HATCH: You do NOT have to use every column. Select only the best columns for X, Y, and Color. Actively ignore raw ID columns if a human-readable text column is available.
-# 8. GROUPING (3D DATA): If the data requires grouping (e.g., comparing categories over time), map the human-readable text column to `color_column`.
-# """
 VIZ_PROMPT_TEMPLATE = """You are an AI Data Analyst configuring the default state for a user's interactive chart builder. 
 You will be given a list of database columns. The dataset may contain anywhere from 2 to 50 columns.
 
@@ -187,4 +173,25 @@ VIZ_SYSTEM_PROMPT = ChatPromptTemplate.from_messages([
 <data_sample_top_3_rows>
 {sample_data}
 </data_sample_top_3_rows>""")
+])
+
+#==========================================================
+# Prompt for Router
+#==========================================================
+ROUTER_PROMPT_TEMPELATE = """
+You are the master routing agent for a Database AI Assistant.
+    Analyze the user's <question>:
+    - If they say hello, ask who you are, or ask for help/instructions, output "chat".
+    - If they ask for metrics, data, lists, top N, or anything requiring database analysis, output "analytics".
+    - Return only literls["caht", "analytics"]
+    - Don't explain anything just one word output.
+"""
+
+ROUTER_PROMPT = ChatPromptTemplate.from_messages([
+    SystemMessagePromptTemplate.from_template(ROUTER_PROMPT_TEMPELATE),
+    HumanMessagePromptTemplate.from_template("""Route the agent based on this question:
+                                             </question>
+                                             {question}
+                                             ,question>
+                                             """)
 ])

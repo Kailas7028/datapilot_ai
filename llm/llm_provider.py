@@ -6,7 +6,7 @@ from llm.base import BaseLLM
 import config
 import dotenv
 import os
-from api.models import VisualizationConfig
+from api.models import VisualizationConfig , RouteDecision
 
 dotenv.load_dotenv() 
 
@@ -34,7 +34,14 @@ class GroqLlamaProvider(BaseLLM):
             return await chain.ainvoke(kwargs)
         except Exception as e:
             raise RuntimeError(f"Error in GroqLlamaProvider: {str(e)}")
-    
+        
+    # Router method
+    async def router_master(self,prompt_template ,**kwargs) -> RouteDecision:
+        try:
+            router_chain = prompt_template | self.llm.with_structured_output(RouteDecision)
+            return await router_chain.ainvoke(kwargs)
+        except Exception as e:
+            raise RuntimeError(f" Router failed to route: {str(e)}")
 
 # 2. Vertex AI Gemini Provider
 class VertexAIGeminiProvider(BaseLLM):

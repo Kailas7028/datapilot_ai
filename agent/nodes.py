@@ -1,6 +1,6 @@
 """ Agent nodes for handling different stages of the SQL generation and execution process """
 #sql generation node
-from llm.prompts import FEW_SHOT_COT_PROMPT, DATA_INSIGHT_PROMPT, VIZ_SYSTEM_PROMPT
+from llm.prompts import FEW_SHOT_COT_PROMPT, DATA_INSIGHT_PROMPT, VIZ_SYSTEM_PROMPT, ROUTER_PROMPT
 from llm.llm_provider import GroqLlamaProvider, VertexAIGeminiProvider
 from agent.state import AgentState
 from utils.loggers import get_logger
@@ -199,3 +199,45 @@ async def visualization_recommender_node(state: AgentState):
         viz_config = {"suggested_visualizations": []}
         
     return {"viz_config": viz_config}
+
+#-----------------------------------------------------------------
+# ROUTER NODE
+#-----------------------------------------------------------------
+async def router_master(state: AgentState) -> AgentState:
+    question = state.get("question", "")
+    logger.info(f"Routing question...:{question}")
+    try:
+        router_result = await groq_engine.router_master(prompt_template=ROUTER_PROMPT , question=question)
+        logger.debug(f" Router Decison : {router_result.decision}")
+        return {"router_decision":router_result.decision.strip().lower()}
+    
+    except Exception as e:
+        logger.error(f"Router node failed: {str(e)}. Defaulting to 'analytics'.")
+        return {"router_decision": "analytics"}
+    
+
+
+
+#----------------------------------------------------------------
+# Chat Node
+#----------------------------------------------------------------
+def chat_node(state: AgentState):
+    # A simple, static welcome message
+    logger.info(f" Chat node activated for question : '{state.get('question')}' ")
+    welcome_message = (
+        "Hello! 👋 I am Datapilot, your AI Data Assistant.\n\n"
+        "I can help you analyze your database using natural language. "
+        "Try asking me things like:\n"
+        "- *'Show me the top 10 products with the highest sales.'*\n"
+        "- *'What was the total revenue grouped by year?'*\n"
+        "- *'Which region has the highest discounts?'*\n\n"
+        "How can I help you explore your data today?"
+    )
+    
+    # We return empty/null values for the database fields so the UI doesn't crash!
+    return {
+        "result_summary": welcome_message,
+        "generated_sql": "-- No SQL required for chat",
+        "result": [],  # Empty DataFrame
+        "viz_config": {"suggested_visualizations": []} # No charts
+    }

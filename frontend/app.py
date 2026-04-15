@@ -232,13 +232,28 @@ else:
     # Render the HTML
     st.markdown(custom_css, unsafe_allow_html=True)
     with st.sidebar:
-        st.markdown("### Menu")
-        st.button("Home", width="stretch")
         
-        if st.button("Configurations", width="stretch"):
-            show_coming_soon("User Configurations")
-        if st.button("Data Insights", width="stretch"):
-            show_coming_soon("Data Insights")
+        st.markdown("Menu")
+       # ---------------------------------------------------------
+    # ACCORDION 1: CONFIGURATIONS
+    # ---------------------------------------------------------
+    # expanded=False means it stays neatly closed until clicked
+        with st.expander("Configurations", expanded=False):
+            st.markdown("### System Status")
+            st.success("🟢 Database Connected")
+            st.info("🧠 LangGraph Memory: Active")
+            
+            st.divider()
+            st.markdown("### Active AI Agents")
+            st.caption("**Router:** `llama-3.1-8b-instant`")
+            st.caption("**SQL:** `gemini-3.1-pro`")
+            st.caption("**Analyst:** `llama-3.1-8b-instant`")
+            
+            st.divider()
+            st.markdown("### Agent Parameters")
+            creativity = st.slider("Analyst Creativity", 0.0, 1.0, 0.2, help="Lower = stricter math. Higher = narrative insights.")
+        
+            # ---------------------------------------------------------
 
         st.write("<br><br>", unsafe_allow_html=True) # Push logout to bottom
         if st.button("Logout", width="stretch"):
@@ -286,7 +301,7 @@ else:
                 st.write(msg["content"])
             else:
                 # Render the tabs directly inside the chat history loop!
-                tabs = st.tabs(["Insights", "Data", "Code", "Visualizations"])
+                tabs = st.tabs(["Insights", "Data", "Code", "Visualizations", "Pivot Table"])
                 
                 with tabs[0]: st.write(msg.get("insight", "Query executed successfully."))
                 
@@ -299,52 +314,6 @@ else:
                         
                 with tabs[2]: st.code(msg.get("sql", "-- No SQL provided"), language="sql")
                 
-                # with tabs[3]: 
-                #     viz_config = msg.get("viz_config", {})
-                #     charts = viz_config.get("suggested_visualizations", []) if viz_config else []
-                    
-                #     if not charts:
-                #         st.info("No visualizations recommended for this specific data shape.")
-                #     else:
-                #         chart_options = {c["chart_id"]: f"{c['title']} ({c['chart_type'].title()})" for c in charts}
-                #         default_id = next((c["chart_id"] for c in charts if c["is_primary"]), charts[0]["chart_id"])
-                        
-                #         # CRITICAL FIX: Add a unique key using the loop index (i)
-                #         selected_chart_id = st.radio(
-                #             "Explore different views:", 
-                #             options=list(chart_options.keys()), 
-                #             format_func=lambda x: chart_options[x],
-                #             horizontal=True,
-                #             index=list(chart_options.keys()).index(default_id),
-                #             key=f"chart_radio_{i}" 
-                #         )
-                        
-                #         active_chart = next(c for c in charts if c["chart_id"] == selected_chart_id)
-                #         st.caption(active_chart["description"])
-                        
-                #         try:
-                #             ctype = active_chart["chart_type"]
-                #             c_col = active_chart.get("color_column")
-                #             # Plotly Routing
-                #             if ctype == "bar":
-                #                 fig = px.bar(df, x=active_chart["x_axis"], y=active_chart["y_axis"], color=c_col)
-                #             elif ctype == "line":
-                #                 fig = px.line(df, x=active_chart["x_axis"], y=active_chart["y_axis"], markers=True, color=c_col)
-                #             elif ctype == "pie":
-                #                 fig = px.pie(df, names=active_chart["x_axis"], values=active_chart["y_axis"], color=c_col)
-                #             elif ctype == "scatter":
-                #                 fig = px.scatter(df, x=active_chart["x_axis"], y=active_chart["y_axis"], color=c_col)
-                #             elif ctype == "area":
-                #                 fig = px.area(df, x=active_chart["x_axis"], y=active_chart["y_axis"], color=c_col)
-                #             else:
-                #                 fig = None
-                #                 st.warning(f"Unsupported chart type: {ctype}")
-                                
-                #             if fig:
-                #                 st.plotly_chart(fig, width='stretch', key=f"plotly_{i}")
-                                
-                #         except Exception as e:
-                #             st.error(f"Graph rendering error: {e}")
                 with tabs[3]: 
                     st.markdown("#### Playgraph")
                     
@@ -399,6 +368,38 @@ else:
                             
                         except Exception as e:
                             st.warning("⚠️ This combination of columns cannot be rendered as this chart type. Try selecting different axes.")
+                with tabs[4]:
+                    df = msg.get("df")
+                    if df is not None and not df.empty:
+                        all_cols = df.columns.tolist()
+                        numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
+                        p_col1, p_col2, p_col3, p_col4 = st.columns(4)
+                        with p_col1:
+                            pivot_rows = st.multiselect("Index",all_cols, key=f"p_row_{i}")
+                        with p_col2:
+                            pivot_cols = st.multiselect("Columns", all_cols, key=f"p_col_{i}")
+                        with p_col3:
+                            if not numeric_cols:
+                                st.warning("No numerical columns available for math.")
+                            pivot_values = st.multiselect("Value",numeric_cols, key=f"p_val_{i}")
+                        with p_col4:
+                            agg_funcs = ["sum", "mean", "count", "min", "max"]
+                            pivot_agg = st.selectbox("Aggregation", agg_funcs, key=f"p_agg_{i}")
+
+                        # Dynamic Pivot Engine
+                        if pivot_rows and pivot_values:
+                            try:
+                                pivot_df = pd.pivot_table(
+                                    df,
+                                    index= pivot_rows,
+                                    columns=pivot_cols if pivot_cols else None,
+                                    values=pivot_values,
+                                    aggfunc=pivot_agg
+                                )
+                                st.dataframe(pivot_df, width='stretch')
+
+                            except Exception as e:
+                                st.error(f" Pivot calculation error: {e}")
 
     # --- User Input Bar ---
     prompt = st.chat_input("Type your question here or type an SQL query to run...")
@@ -449,82 +450,3 @@ else:
                                 
                 except requests.exceptions.ConnectionError:
                     st.error("🚨 Could not connect to the backend API. Is your FastAPI server running on port 8000?")
-    # if st.session_state.status == 200 and st.session_state.counter ==0 :  
-    
-    #     # Display response in tabs
-    #     tabs = st.tabs(["Insights", "Data", "Code", "Visualizations", "Lineage"])
-
-    #     #===============================
-    #     # TAB 0 DATA INSIGHTS
-    #     with tabs[0]: st.write(insight_text)
-
-    #     #==============================
-    #     #TAB SQL RESULT OR DATA
-    #     with tabs[1]: 
-    #         st.dataframe(sql_results, width="stretch")
-    #         df = pd.DataFrame(sql_results)
-
-    #     #=============================
-    #     # TAB 2 SQL CODE
-    #     with tabs[2]: 
-    #     # Expandable SQL Code Block
-    #         st.code(generated_sql, language="sql")
-
-    #     #==============================
-    #     # TAB 3 VISUALIZATION
-    #     with tabs[3]:
-    #     # Check if we have visualization data
-    #         charts = viz_config.get("suggested_visualizations",[]) if viz_config else []
-    #         if not sql_results:
-    #             st.empty() # Do nothing if no data
-    #         elif not charts:
-    #             st.info("No visualizations recommended for this specific data shape.")
-    #         else:
-    #         # Create a dictionary for the radio buttons UI: { chart_id : "Title (Type)" }
-    #             chart_options = {c["chart_id"]: f"{c['title']} ({c['chart_type'].title()})" for c in charts}
-                                    
-    #             # Find the primary chart to set as default selected
-    #             default_id = next((c["chart_id"] for c in charts if c["is_primary"]), charts[0]["chart_id"])
-                                    
-    #             # The Interactive Radio Buttons
-    #             selected_chart_id = st.radio(
-    #                 "Explore different views:", 
-    #                 options=list(chart_options.keys()), 
-    #                 format_func=lambda x: chart_options[x],
-    #                 horizontal=True,
-    #                 index=list(chart_options.keys()).index(default_id)
-    #                 )
-                                    
-    #             # Grab the configuration for the currently selected chart
-    #             active_chart = next(c for c in charts if c["chart_id"] == selected_chart_id)
-                                    
-    #             st.caption(active_chart["description"])
-                                    
-    #             # Plotly Routing Engine
-    #             try:
-    #                 ctype = active_chart["chart_type"]
-    #                 # We use the DataFrame (df) we created earlier in col1
-                                        
-    #                 if ctype == "bar":
-    #                     fig = px.bar(df, x=active_chart["x_axis"], y=active_chart["y_axis"])
-    #                 elif ctype == "line":
-    #                     fig = px.line(df, x=active_chart["x_axis"], y=active_chart["y_axis"], markers=True)
-    #                 elif ctype == "pie":
-    #                     fig = px.pie(df, names=active_chart["x_axis"], values=active_chart["y_axis"])
-    #                 elif ctype == "scatter":
-    #                     fig = px.scatter(df, x=active_chart["x_axis"], y=active_chart["y_axis"])
-    #                 elif ctype == "area":
-    #                     fig = px.area(df, x=active_chart["x_axis"], y=active_chart["y_axis"])
-    #                 else:
-    #                     fig = None
-    #                     st.warning(f"Unsupported chart type: {ctype}")
-                                            
-    #                 # Draw the final graph!
-    #                 if fig:
-    #                     st.plotly_chart(fig, width='stretch')
-                                            
-    #             except Exception as e:
-    #                 st.error(f"Graph rendering error. Could not map X/Y axes to data: {e}")
-
-    #     with tabs[4]: st.caption("Data Lineage tracking not enabled.")
-                  
