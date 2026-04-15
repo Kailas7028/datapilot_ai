@@ -287,9 +287,9 @@ else:
     # --- Render Sample Questions (Only if chat is empty) ---
     if not st.session_state.messages:
         with st.expander("💡 Here are some sample questions", expanded=True):
-            if st.button("Superhosts in Delhi", width="stretch"):
+            if st.button("Top 10 products name sell as per year", width="stretch"):
                 st.toast("Copy and paste this into the chat below!", icon="💡")
-            if st.button("Average price of Villas vs Apartments", width="stretch"):
+            if st.button("which customer has highest spending in 2017 and on which product category", width="stretch"):
                 st.toast("Copy and paste this into the chat below!", icon="💡")
 
 

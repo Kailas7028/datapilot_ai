@@ -8,7 +8,7 @@ def should_call(state: AgentState) -> bool:
     """
     Node to determine if we should call the summary agent based on the result length
     """
-    if state.get('result') and len(state['result']) > 15:  # Arbitrary length threshold
+    if state.get('result') and len(state['result']) > 100:  # Arbitrary length threshold
         return "end_workflow"
     return "summary_agent"
 
