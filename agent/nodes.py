@@ -1,7 +1,7 @@
 """ Agent nodes for handling different stages of the SQL generation and execution process """
 #sql generation node
 from llm.prompts import FEW_SHOT_COT_PROMPT, DATA_INSIGHT_PROMPT, VIZ_SYSTEM_PROMPT, ROUTER_PROMPT
-from llm.llm_provider import GroqLlamaProvider, VertexAIGeminiProvider
+from llm.llm_provider import GroqLlamaProvider, VertexAIGeminiProvider, Gemini3PreviewProvider
 from agent.state import AgentState
 from utils.loggers import get_logger
 from rag.pinecone_impl import PineconeWrapper
@@ -14,9 +14,10 @@ from app.sql_validator import validate_sql
 logger = get_logger(__name__)
 #initialize retriever object
 retriever = PineconeWrapper()
-# Initialize LLM providers (you can swap these out as needed)
-gemini_engine = VertexAIGeminiProvider()
 
+# Initialize LLM providers (you can swap these out as needed)
+gemini_engine = VertexAIGeminiProvider()   #vertexai gemini-2.5-pro
+gemini3_engine = Gemini3PreviewProvider() # Free tier gemini-3.1-pro-preview for lightweight tasks
 groq_engine = GroqLlamaProvider()   #llama-3.1-8b-instant
 
 #sql generation node
@@ -27,7 +28,7 @@ async def sql_generation_node(state: AgentState) -> AgentState:
     """
     try:
         logger.info(f"Generating SQL for the question: {state.get('question','')}")
-        response = await gemini_engine.agenerate(prompt_template=FEW_SHOT_COT_PROMPT,schema = state.get("retrieved_docs",[]),question = state.get("question",""))
+        response = await gemini3_engine.agenerate(prompt_template=FEW_SHOT_COT_PROMPT,schema = state.get("retrieved_docs",[]),question = state.get("question",""))
         input_tokens=response.usage_metadata.get("input_tokens", 0)
         output_tokens=response.usage_metadata.get("output_tokens", 0)
         

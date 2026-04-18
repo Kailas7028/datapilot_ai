@@ -1,6 +1,7 @@
 # llm/llm_provider.py
 from langchain_groq import ChatGroq
-from langchain_google_genai import ChatGoogleGenerativeAI # <-- NEW IMPORT
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import AIMessageChunk
 from llm.base import BaseLLM
 import config
@@ -13,11 +14,11 @@ dotenv.load_dotenv()
 # 1. Existing Groq Provider
 class GroqLlamaProvider(BaseLLM):
     def __init__(self, model_name: str = "llama-3.1-8b-instant", temperature: float = 0.0):
-        api_key = os.getenv("GROQ_API_KEY")
+
         self.llm = ChatGroq(
             model=model_name,
             temperature=temperature,
-            groq_api_key=api_key
+            groq_api_key=os.getenv("GROQ_API_KEY")
         )
 
     def generate(self, prompt_template, **kwargs) -> AIMessageChunk:
@@ -42,7 +43,8 @@ class GroqLlamaProvider(BaseLLM):
             return await router_chain.ainvoke(kwargs)
         except Exception as e:
             raise RuntimeError(f" Router failed to route: {str(e)}")
-
+        
+#--------------------------------------------------------------------------------------------
 # 2. Vertex AI Gemini Provider
 class VertexAIGeminiProvider(BaseLLM):
     def __init__(self, model_name: str = "gemini-2.5-pro", temperature: float = 0.0):
@@ -94,3 +96,29 @@ class VertexAIGeminiProvider(BaseLLM):
             return await chain.ainvoke(kwargs)
         except Exception as e:
             raise RuntimeError(f"Error in VertexAIGeminiProvider (quick_agenerate): {str(e)}")
+        
+#Free tier gemini-3.1-pro-preview provider 
+#---------------------------------------------------------------------------------------------
+class Gemini3PreviewProvider(BaseLLM):
+    def __init__(self, model_name: str = "gemini-2.5-flash", temperature: float = 0.0):
+        self.llm = ChatGoogleGenerativeAI(
+            model=model_name,
+            temperature=temperature,
+            max_output_tokens=8192,
+            api_key=os.getenv("GOOGLE_API_KEY")
+        )
+
+    def generate(self, prompt_template, **kwargs) -> AIMessageChunk:
+        try:
+            chain = prompt_template | self.llm
+            return chain.invoke(kwargs)
+        except Exception as e:
+            raise RuntimeError(f"Error in Gemini3PreviewProvider: {str(e)}")
+        
+    #async version of generate    
+    async def agenerate(self, prompt_template, **kwargs) -> AIMessageChunk:
+        try:
+            chain = prompt_template | self.llm
+            return await chain.ainvoke(kwargs)
+        except Exception as e:
+            raise RuntimeError(f"Error in Gemini3PreviewProvider: {str(e)}")
