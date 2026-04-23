@@ -145,7 +145,7 @@ async def provision_new_tenant(user: UserCreate, is_admin: bool = Depends(verify
 # --- 4. AUTH & SETTINGS ---
 @app.post("/api/v1/login")
 @limiter.limit("5/minute")  # Limit login attempts to prevent brute-force attacks
-async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
+async def login_for_access_token(request: Request, form_data: OAuth2PasswordRequestForm = Depends()):
     user = await get_user_from_db(form_data.username )
     if not user or not verify_password(form_data.password, user["hashed_password"]):
         raise HTTPException(status_code=401, detail="Incorrect username or password")
@@ -161,7 +161,7 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
 # Update Tenant Database URL (Authenticated Endpoint)
 @app.put("/api/v1/settings/database")
 @limiter.limit("5/hour")  # Limit to prevent abuse
-async def update_tenant_database(payload: DatabaseUpdateRequest, user: dict = Depends(require_admin)):
+async def update_tenant_database(request: Request, payload: DatabaseUpdateRequest, user: dict = Depends(require_admin)):
     org_id = user.get("org_id")
     MASTER_KEY = os.getenv("MASTER_ENCRYPTION_KEY")
     if not MASTER_KEY:
@@ -203,7 +203,7 @@ async def update_tenant_database(payload: DatabaseUpdateRequest, user: dict = De
 # --- 5. QUERY ENDPOINT ---
 @app.post("/api/v1/query")
 @limiter.limit("10/minute")  # Limit query requests to prevent abuse
-async def ask_database(payload: QueryRequest, user: dict = Depends(get_current_user)):
+async def ask_database(request: Request, payload: QueryRequest, user: dict = Depends(get_current_user)):
     org_id = user.get("org_id")
     user_id = user.get("user_id")
 

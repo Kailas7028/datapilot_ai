@@ -54,13 +54,13 @@ class VertexAIGeminiProvider(BaseLLM):
         self.llm = ChatGoogleGenerativeAI(
             model=model_name,
             temperature=temperature,
-            max_output_tokens=8192,
+            max_tokens=8192,
             project = config.GCP_PROJECT_ID
         )
         self.flash_llm = ChatGoogleGenerativeAI(
             model="gemini-2.5-flash",  # A smaller, faster model variant for quick checks
             temperature=0.0,
-            max_output_tokens=1024,
+            max_tokens=1024,
             project = os.getenv("GCP_PROJECT_ID")
         ).with_structured_output(VisualizationConfig)
 
