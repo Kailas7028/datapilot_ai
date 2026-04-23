@@ -61,9 +61,6 @@ async def sql_generation_node(state: AgentState) -> AgentState:
         logger.info(f"SQL generation completed. Input tokens: {input_tokens}, Output tokens: {output_tokens}")
 
         return {"generated_sql": final_sql, "input_tokens": input_tokens, "output_tokens": output_tokens}
-    except Exception as e:  
-        logger.error(f"Error occurred during SQL generation: {str(e)}")
-        return {"generated_sql": None, "input_tokens": 0, "output_tokens": 0, "error": str(e)}
     
     # Handle specific API errors that indicate the primary LLM is unavailable and route to fallback
     except (exceptions.ServiceUnavailableError, exceptions.Resourceexhausted) as api_error:
@@ -83,6 +80,9 @@ async def sql_generation_node(state: AgentState) -> AgentState:
 
         return {"generated_sql": None, "input_tokens": 0, "output_tokens": 0, "error": f"API error: {str(api_error)}"}
 
+    except Exception as e:  
+        logger.error(f"Error occurred during SQL generation: {str(e)}")
+        return {"generated_sql": None, "input_tokens": 0, "output_tokens": 0, "error": str(e)}
 #sql validation node
 #---------------------------------------------------------
 def sql_validation_node(state: AgentState) -> AgentState:
