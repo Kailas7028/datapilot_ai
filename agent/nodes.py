@@ -3,7 +3,7 @@
 from urllib import response
 
 from llm.prompts import FEW_SHOT_COT_PROMPT, DATA_INSIGHT_PROMPT, VIZ_SYSTEM_PROMPT, ROUTER_PROMPT, SQL_RETRY_PROMPT
-from llm.llm_provider import GroqLlamaProvider, VertexAIGeminiProvider, Gemini3PreviewProvider
+from llm.llm_provider import GroqLlamaProvider, VertexAIGeminiProvider, Gemini3PreviewProvider, FallbackProvider
 from agent.state import AgentState
 from utils.loggers import get_logger
 from rag.pinecone_impl import PineconeWrapper
@@ -13,6 +13,7 @@ from app.sql_executor import execute_sql
 from app.sql_validator import validate_sql
 from langsmith import traceable
 from langchain_core.messages import AIMessage
+from google.api_core import exceptions
 
 # Initialize logger
 logger = get_logger(__name__)
@@ -23,6 +24,7 @@ retriever = PineconeWrapper()
 gemini_engine = VertexAIGeminiProvider()   #vertexai gemini-2.5-pro
 gemini3_engine = Gemini3PreviewProvider() # Free tier gemini-3.1-pro-preview for lightweight tasks
 groq_engine = GroqLlamaProvider()   #llama-3.1-8b-instant
+fallback_provider = FallbackProvider() #mistral-7b-instant-v0.1 for fallback
 
 #sql generation node
 #---------------------------------------------------------
@@ -41,17 +43,17 @@ async def sql_generation_node(state: AgentState) -> AgentState:
         input_tokens = state.get("input_tokens", 0) + input_tokens
         output_tokens = state.get("output_tokens", 0) + output_tokens
 
-        # 3. Clean the output 
-        raw_output = response.content
+        # # 3. Clean the output 
+        # raw_output = response.content
 
-        #check does llm returned list of blocks
-        if isinstance(raw_output, list):
-            raw_sql = raw_output[0].get("text", "")
-        else:
-            raw_sql = raw_output.strip()
+        # #check does llm returned list of blocks
+        # if isinstance(raw_output, list):
+        #     raw_sql = raw_output[0].get("text", "")
+        # else:
+        #     raw_sql = raw_output.strip()
         
         # Safely strip markdown if the LLM disobeys the prompt
-        final_sql = extract_pure_sql(raw_sql)
+        final_sql = extract_pure_sql(response.content)
         
         # 4. Return the cleaned SQL back to the graph state
         
@@ -62,6 +64,24 @@ async def sql_generation_node(state: AgentState) -> AgentState:
     except Exception as e:  
         logger.error(f"Error occurred during SQL generation: {str(e)}")
         return {"generated_sql": None, "input_tokens": 0, "output_tokens": 0, "error": str(e)}
+    
+    # Handle specific API errors that indicate the primary LLM is unavailable and route to fallback
+    except (exceptions.ServiceUnavailableError, exceptions.Resourceexhausted) as api_error:
+        logger.error(f"Routing to fallback mistral llm due to : {str(api_error)}")
+        try:
+            response = await fallback_provider.agenerate(prompt_template=FEW_SHOT_COT_PROMPT,schema = state.get("retrieved_docs",[]),question = state.get("question",""), chat_history=history)
+            input_tokens=response.usage_metadata.get("input_tokens", 0)
+            output_tokens=response.usage_metadata.get("output_tokens", 0)
+            # Safely strip markdown if the LLM disobeys the prompt
+            final_sql = extract_pure_sql(response.content)
+            logger.info(f"Generated SQL: {final_sql}")
+            logger.info(f"SQL generation completed. Input tokens: {input_tokens}, Output tokens: {output_tokens}")
+
+            return {"generated_sql": final_sql, "input_tokens": input_tokens, "output_tokens": output_tokens}
+        except Exception as fallback_error:
+            logger.error(f"Error in fallback provider: {str(fallback_error)}")
+
+        return {"generated_sql": None, "input_tokens": 0, "output_tokens": 0, "error": f"API error: {str(api_error)}"}
 
 #sql validation node
 #---------------------------------------------------------

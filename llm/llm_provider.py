@@ -8,6 +8,7 @@ import config
 import dotenv
 import os
 from api.models import VisualizationConfig , RouteDecision
+from langchain_mistralai import ChatMistralAI
 
 dotenv.load_dotenv() 
 
@@ -122,3 +123,27 @@ class Gemini3PreviewProvider(BaseLLM):
             return await chain.ainvoke(kwargs)
         except Exception as e:
             raise RuntimeError(f"Error in Gemini3PreviewProvider: {str(e)}")
+        
+# fallback in case any model is unavailable, ensuring the system remains operational (langchain-mistralai)
+class FallbackProvider(BaseLLM):
+    def __init__(self):
+        self.fallback_llm = ChatMistralAI(
+            model = "mistral-7b-instant-v0.1",  # A smaller, open-source model for fallback scenarios
+            temperature=0.0,
+            max_output_tokens=4096,
+            api_key=os.getenv("MISTRAL_API_KEY")
+        )
+    def generate(self, prompt_template, **kwargs) -> AIMessageChunk:
+        try:
+            chain = prompt_template | self.fallback_llm
+            return chain.invoke(kwargs)
+        except Exception as e:
+            raise RuntimeError(f"Error in FallbackProvider: {str(e)}")
+
+    #async version of generate    
+    async def agenerate(self, prompt_template, **kwargs) -> AIMessageChunk:
+        try:
+            chain = prompt_template | self.fallback_llm
+            return await chain.ainvoke(kwargs)
+        except Exception as e:
+            raise RuntimeError(f"Error in FallbackProvider: {str(e)}")
