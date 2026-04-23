@@ -1,6 +1,8 @@
 """ Agent nodes for handling different stages of the SQL generation and execution process """
 #sql generation node
-from llm.prompts import FEW_SHOT_COT_PROMPT, DATA_INSIGHT_PROMPT, VIZ_SYSTEM_PROMPT, ROUTER_PROMPT
+from urllib import response
+
+from llm.prompts import FEW_SHOT_COT_PROMPT, DATA_INSIGHT_PROMPT, VIZ_SYSTEM_PROMPT, ROUTER_PROMPT, SQL_RETRY_PROMPT
 from llm.llm_provider import GroqLlamaProvider, VertexAIGeminiProvider, Gemini3PreviewProvider
 from agent.state import AgentState
 from utils.loggers import get_logger
@@ -9,6 +11,8 @@ import json
 from utils.utils import extract_pure_sql
 from app.sql_executor import execute_sql
 from app.sql_validator import validate_sql
+from langsmith import traceable
+from langchain_core.messages import AIMessage
 
 # Initialize logger
 logger = get_logger(__name__)
@@ -28,11 +32,16 @@ async def sql_generation_node(state: AgentState) -> AgentState:
     """
     try:
         logger.info(f"Generating SQL for the question: {state.get('question','')}")
-        response = await gemini3_engine.agenerate(prompt_template=FEW_SHOT_COT_PROMPT,schema = state.get("retrieved_docs",[]),question = state.get("question",""))
+        history = state.get("messages", [])[:-1]  # Get all messages except the latest one which is the current question
+        response = await gemini3_engine.agenerate(prompt_template=FEW_SHOT_COT_PROMPT,schema = state.get("retrieved_docs",[]),question = state.get("question",""), chat_history=history)
         input_tokens=response.usage_metadata.get("input_tokens", 0)
         output_tokens=response.usage_metadata.get("output_tokens", 0)
-        
-        # 3. Clean the output (Replace the logic we lost from sql_agent)
+
+        # Count Total Tokens for one question-answer cycle (for cost estimation and monitoring)
+        input_tokens = state.get("input_tokens", 0) + input_tokens
+        output_tokens = state.get("output_tokens", 0) + output_tokens
+
+        # 3. Clean the output 
         raw_output = response.content
 
         #check does llm returned list of blocks
@@ -71,87 +80,136 @@ def sql_validation_node(state: AgentState) -> AgentState:
     
 #sql execution node
 #-----------------------------------------------------------
-
-def sql_execution_node(state: AgentState) -> AgentState:
+@traceable(name="sql_execution_node")  # This decorator will automatically create a trace for this node in LangSmith, allowing you to see the input and output of this node in the trace view.
+async def sql_execution_node(state: AgentState) -> AgentState:
     """
     Node for executing the validated SQL and storing the result
     """
     try:
         logger.info("Executing validated SQL.")
-        if state.get("validated_sql"):
-            result = execute_sql(state.get("validated_sql", ""))
+        org_id = state.get("org_id")  # Replace with dynamic org_id in production
+        validate_sql = state.get("validated_sql")
+        if validate_sql:
+            result = await execute_sql(validate_sql, org_id)
             logger.info(f"SQL execution successful.")
             return {"result": result, "error": None}
+        else:
+            raise ValueError("No validated SQL to execute or organization ID not provided.")
     except Exception as e:
         logger.error(f"Error occurred while executing SQL: {str(e)}")
         return {"result": None, "error": str(e)}
+    
 
+#------------------------------------------------------------------------------------------
+# Retry Node (for handling retries in case of errors during SQL generation, validation, or execution)
+#------------------------------------------------------------------------------------------
+async def retry_node(state: AgentState) -> AgentState:
+    """
+    Node for handling retries in case of errors during SQL generation, validation, or execution
+    """
+    try:
+        error = state.get("error")
+        if error and state["retries"] < 2:  # Retry up to 3 times
+            retries_count = state.get("retries", 0) + 1
+            logger.info(f"Retrying due to error: {error}")
+            # Clear the error and relevant fields to trigger a retry in the graph
+            retry_result = await gemini3_engine.agenerate(prompt_template=SQL_RETRY_PROMPT, error_message=error, question=state.get("question", ""), schema=state.get("retrieved_docs", []))
+            # Count Total Tokens for one question-answer cycle (for cost estimation and monitoring)
+            new_in_tokens = retry_result.usage_metadata.get("input_tokens", 0)
+            new_out_tokens = retry_result.usage_metadata.get("output_tokens", 0)
+            total_input = state.get("input_tokens", 0) + new_in_tokens
+            total_output = state.get("output_tokens", 0) + new_out_tokens
 
+            raw_output = retry_result.content
+            #check does llm returned list of blocks
+            if isinstance(raw_output, list):
+                raw_sql = raw_output[0].get("text", "")
+            else:
+                raw_sql = raw_output.strip()
+            
+            # Safely strip markdown if the LLM disobeys the prompt
+            final_sql = extract_pure_sql(raw_sql)
+            logger.info(f"Regenerated SQL: {final_sql}")
+            logger.info(f"SQL Regeneration completed. Input tokens: {total_input}, Output tokens: {total_output}")
 
-# retriever node
-#------------------------------------------------
+            return {"generated_sql": final_sql, "input_tokens": total_input, "output_tokens": total_output, "error": None, "retries": retries_count}
+            
+        else:
+            # No error, no retry needed
+            return {}
+    except Exception as e:
+        logger.error(f"Error in retry node: {str(e)}")
+        return state  # Return the original state if retry logic fails
+    
+#------------------------------------------------------------------------------------------
+# Retriever Node (for fetching relevant documents from the vector store based on the question)
+#------------------------------------------------------------------------------------------
 
-def retriever_node(state: AgentState) -> AgentState:
+def retriever_node(state: AgentState) -> dict:
     """
     Node for retrieving relevant documents from the vector store based on the question
     """
-    logger.info("Retrieving relevant documents from vector store.")
-    results = retriever.search(query=state.get("question", ""), limit=5)
+    try:
+        logger.info("Retrieving relevant documents from vector store.")
     
+        org_id = state.get("org_id")  
+        if not org_id:
+            raise ValueError("Organization ID is required for retrieval.")
+        
+        # Pinecone fetches up to 5 tables
+        results = retriever.search(query=state.get("question"), limit=5, tenant_id=org_id)
     
-    if not results:
-        print("No results found!")
-        return
+        if not results:
+            logger.info("No results found!")
+            return {"retrieved_docs": []}
+        
+        formatted_tables = []
 
-   
-    
-    formatted_tables = []
-
-    for doc in results:
-        # 1. Get the basic table info
-        table_name = doc.metadata.get("source", "unknown_table")
-        
-        # Add the page_content (summary) as SQL comments so the LLM has business context
-        summary_lines = doc.page_content.split('\n')
-        comment_block = "\n".join([f"-- {line}" for line in summary_lines])
-        
-        # Start building the SQL table definition
-        schema_ddl = f"CREATE TABLE {table_name} (\n"
-        
-        try:
-            # 2. THE FIX: Parse the stringified JSON back into a Python list
-            raw_payload = doc.metadata.get("schema_payload", "[]")
-            columns = json.loads(raw_payload)
+        # 1. Start the loop
+        for doc in results:
+            table_name = doc.metadata.get("source", "unknown_table")
             
-            # 3. Iterate through the parsed list of dictionaries
-            column_definitions = []
-            for col in columns:
-                col_str = f"    {col['name']} {col['type']}"
+            # 2. Put the try-except INSIDE the loop so one bad table doesn't ruin the batch
+            try:
+                summary_lines = doc.page_content.split('\n')
+                comment_block = "\n".join([f"-- {line}" for line in summary_lines])
                 
-                # Add Primary Key constraint if true
-                if col.get("is_pk"):
-                    col_str += " PRIMARY KEY"
-                    
-                # Add Foreign Key constraint if it exists
-                if col.get("fk_ref"):
-                    col_str += f" REFERENCES {col['fk_ref']}"
-                    
-                column_definitions.append(col_str)
+                schema_ddl = f"{comment_block}\nCREATE TABLE {table_name} (\n"
             
-            # Join the columns safely with commas
-            schema_ddl += ",\n".join(column_definitions)
-            schema_ddl += "\n);"
-            
-        except json.JSONDecodeError as e:
-            print(f"Error decoding JSON for {table_name}: {e}")
-            schema_ddl += "    -- Error loading columns\n);"
+                raw_payload = doc.metadata.get("schema_payload", "[]")
+                columns = json.loads(raw_payload)
+                
+                column_definitions = []
+                for col in columns:
+                    col_str = f"    {col['name']} {col['type']}"
+                    
+                    if col.get("is_pk"):
+                        col_str += " PRIMARY KEY"
+                        
+                    if col.get("fk_ref"):
+                        col_str += f" REFERENCES {col['fk_ref']}"
+                        
+                    column_definitions.append(col_str)
+                
+                schema_ddl += ",\n".join(column_definitions)
+                schema_ddl += "\n);"
+                
+                # 3. THE FIX: Append INSIDE the loop
+                formatted_tables.append(schema_ddl)
+                
+            except json.JSONDecodeError as e:
+                logger.error(f"Error decoding JSON for {table_name}: {e}")
+                formatted_tables.append(f"-- Error loading columns for {table_name}")
+            except Exception as e:
+                logger.error(f"Unexpected error processing document {table_name}: {e}")
+                formatted_tables.append(f"-- Unexpected error loading columns for {table_name}")
 
-        # Combine the comments and the schema
-        formatted_tables.append(f"{schema_ddl}")
-
-    logger.info(f"Retrieved {len(formatted_tables)} relevant documents.")
-    #logger.debug(f"Formatted table schemas for LLM:\n{formatted_tables}")
-    return {"retrieved_docs": formatted_tables}
+        logger.info(f"Retrieved {len(formatted_tables)} relevant documents.")
+        return {"retrieved_docs": formatted_tables}
+        
+    except Exception as e:
+        logger.error(f"Retrieval node failed: {e}")
+        return {"retrieved_docs": []}
 
 
 # result summarization node
@@ -166,13 +224,15 @@ async def result_summarization_node(state: AgentState) -> AgentState:
         safe_json = json.dumps(state.get("result",""), default=str)
         response = await groq_engine.agenerate(prompt_template=DATA_INSIGHT_PROMPT, sql_result=safe_json, sql_query=state.get("generated_sql", ""), question=state.get("question", ""))
         summary = response.content.strip()
+        # 3. Create the AI memory block
+        ai_memory = f"Previously generated SQL:\n{state.get('generated_sql', '')}\n\nSummary:\n{summary}"
         logger.info("Result summarization successful.")
-        return {"result_summary": summary, "error": None}
+        return {"result_summary": summary, "error": None, "messages": [AIMessage(content=ai_memory)]}
     except Exception as e:
         logger.error(f"Error occurred during result summarization: {str(e)}")
-        return {"result_summary": None, "error": str(e)}
-    
+        return {"result_summary": None, "error": str(e), "messages": []}
 
+    
 # Visualization config generation node (for generating chart config from SQL results)
 #---------------------------------------------
 

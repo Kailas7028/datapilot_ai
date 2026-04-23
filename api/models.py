@@ -38,3 +38,7 @@ class RouteDecision(BaseModel):
 class DataInsights(BaseModel):
     summary : str = Field(description="A brief 1-2 sentence conversational answer to the user's question.")
     key_insights: List[str] = Field(description="Exactly 3 bullet points highlighting trends, anomalies, or statistical facts from the data.")
+    
+# Pydantic Model for Database Update Requests
+class DatabaseUpdateRequest(BaseModel):
+    db_url: str  # The raw PostgreSQL URL from the user

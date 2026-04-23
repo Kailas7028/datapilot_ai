@@ -1,36 +1,34 @@
-from app.db import get_connection, release_connection
-import logging
-from  psycopg2 import extras
-logger = logging.getLogger(__name__)
+from app.tenant_db import get_tenant_pool
+from utils.loggers import get_logger
 
-def execute_sql(sql: str):
-    
-    # Get a connection from the pool
-    conn = get_connection()
-    
-    # Set the connection to read-only mode to prevent any accidental writes
-    conn.set_session(readonly=True, autocommit=True) 
-    # Create a cursor for executing the SQL
-    cursor = conn.cursor(cursor_factory=extras.RealDictCursor)
+logger = get_logger(__name__)
+
+async def execute_sql(sql: str, org_id: str) -> list:
+    """
+    Executes SQL against the specific organization's database using the async pool.
+    """
+    # Get the async pool for this specific organization
+    pool = await get_tenant_pool(org_id)
 
     try:
-        logger.info(f"Executing SQL: {sql}")
-        cursor.execute(sql)
+        logger.info(f"Executing SQL for org {org_id}: {sql}")
         
-        if cursor.description:  
-            result = cursor.fetchall()
-        else:
-            result = []
+        # 1. Acquire connection from the tenant's pool
+        async with pool.acquire() as conn:
+            
+            # 2. Open a read-only transaction block for strict security
+            async with conn.transaction(readonly=True):
+                
+                # 3. Fetch data directly. asyncpg returns a list of Record objects.
+                records = await conn.fetch(sql)
+                
+                # 4. Convert Records to standard dicts for Streamlit/Pandas compatibility
+                result = [dict(record) for record in records]
+                
+        return result
         
     except Exception as e:
         logger.error(f"Database execution failed: {e}")
-        # Rollback is still good practice to clear the failed transaction state
-        conn.rollback() 
+        # The async with conn.transaction() block automatically rolled back the 
+        # transaction the moment this exception was thrown.
         raise e
-    finally:
-        #close the cursor and release the connection back to the pool
-        if "cursor" in locals():
-            cursor.close()
-        release_connection(conn)
-
-    return result

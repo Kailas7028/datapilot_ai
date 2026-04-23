@@ -1,6 +1,9 @@
-from typing import TypedDict, Optional, List
+from typing import TypedDict, Optional, List, Annotated
+import operator
+from langchain_core.messages import AnyMessage
 
 class AgentState(TypedDict):
+    messages: Annotated[List[AnyMessage],operator.add]
     question: str
     retrieved_docs: Optional[List]
     generated_sql: Optional[str]
@@ -14,3 +17,6 @@ class AgentState(TypedDict):
     viz_config: Optional[dict]
     router_decision : Optional[str]
     data_insights: Optional[List[str]]
+    org_id:str
+    user_id:str
+    retries:int

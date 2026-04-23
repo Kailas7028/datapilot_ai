@@ -6,6 +6,7 @@ import time
 import uuid
 import pandas as pd
 import plotly.express as px
+import json
 
 try:
     from dotenv import load_dotenv
@@ -136,6 +137,8 @@ if "status" not in st.session_state:
     st.session_state.status = None
 if "counter" not in st.session_state:
     st.session_state.counter = 0
+if 'role' not in st.session_state:
+    st.session_state.role = None
 
 # ==========================================
 # 🔒 THE DRIBBBLE-STYLE LOGIN PAGE
@@ -156,21 +159,25 @@ if not st.session_state.access_token:
     with right_form:
         with st.container():
             st.markdown("### Welcome Back")
-            tab_login, tab_register = st.tabs(["Log In", "Create Account"])
+            tab_login, tenant_register = st.tabs(["Log In", "Tenant Registration"])
             
             # --- TAB 1: LOG IN ---
             with tab_login:
                 with st.form("login_form"):
-                    username = st.text_input("Email Address", placeholder="name@company.com")
-                    password = st.text_input("Password", type="password", placeholder="••••••••")
+                    username = st.text_input("Email Address", placeholder="name@company.com", value="alex.xman.5555@gmail.com")
+                    password = st.text_input("Password", type="password", placeholder="••••••••", value="Alex@123")
 
                     if st.form_submit_button("Sign In", type="primary", width='stretch'):
                         with st.status("Authenticating...", expanded=True) as status:
                             try:
-                                response = requests.post(LOGIN_URL, data={"username": username, "password": password}, timeout=3.0)
+                                final_username = username.strip() if username else "alex.xman.5555@gmail.com"
+                                final_password = password.strip() if password else "Alex@123"
+                                response = requests.post(LOGIN_URL, data={"username": final_username, "password": final_password}, timeout=3.0)
                                 if response.status_code == 200:
                                     status.update(label="Login successful!", state="complete")
                                     st.session_state.access_token = response.json().get("access_token")
+                                    st.session_state.role = response.json().get("role", "user")
+                                    
                                     st.rerun()
                                 else:
                                     status.update(label="Login failed.", state="error")
@@ -182,10 +189,12 @@ if not st.session_state.access_token:
                                     status.update(label="Waking up Voxel's AI engines... (this takes ~45 seconds) ⏳", state="running")
                                     # 2. Keep your toast as a nice pop-up alert
                                     st.toast("⚠️ Server is waking up from sleep.", icon="⏳")
-                                    response = requests.post(LOGIN_URL, data={"username": username, "password": password}, timeout=60)
+                                    response = requests.post(LOGIN_URL, data={"username": final_username , "password": final_password }, timeout=60)
                                     if response.status_code == 200:
                                         status.update(label="Login successful!", state="complete")
                                         st.session_state.access_token = response.json().get("access_token")
+                                        st.session_state.role = response.json().get("role", "user")
+
                                         st.rerun()
                                     else:
                                         status.update(label="Login failed.", state="error")
@@ -198,44 +207,46 @@ if not st.session_state.access_token:
                                 status.update(label="Connection Error", state="error")
                                 st.error(f"Something went wrong: {str(e)}")
                             
-
+            with tenant_register:
+                if st.button("New tenant? Register here!", use_container_width=True):
+                    st.warning(" Only an admin can create new tenants. Please contact your administrator to set up your account.")
             # --- TAB 2: REGISTER ---
-            with tab_register:
-                with st.form("register_form"):
-                    new_username = st.text_input("Email Address")
-                    new_password = st.text_input("Password", type="password")
+            # with tab_register:
+            #     with st.form("register_form"):
+            #         new_username = st.text_input("Email Address")
+            #         new_password = st.text_input("Password", type="password")
                     
-                    if st.form_submit_button("Sign Up", type="primary", width='stretch'):
-                        with st.status("Preparing registration...", expanded=True) as status:
-                            try:
-                                headers={"Accept": "application/json", "Content-Type": "application/json"}
-                                response = requests.post(REGISTER_URL, json={"username": new_username, "password": new_password}, timeout=3.0, headers=headers)
-                                if response.status_code == 201:
-                                    st.success("Account created successfully! You can now log in.")
-                                else:
-                                    status.update(label="Registration failed.", state="error")
-                                    st.error(response.json().get("detail", "Registration failed."))
-                            except requests.exceptions.ReadTimeout:
-                                #handling cold start 
-                                try:
-                                    # 1. Update the spinning status box text directly!
-                                    status.update(label="Waking up Voxel's AI engines... (this takes ~45 seconds) ⏳", state="running")
-                                    # 2. Keep your toast as a nice pop-up alert
-                                    st.toast("⚠️ Server is waking up from sleep.", icon="⏳")
-                                    headers={"Accept": "application/json", "Content-Type": "application/json"}
-                                    response = requests.post(REGISTER_URL, json={"username": new_username, "password": new_password}, timeout=60, headers=headers)
-                                    if response.status_code == 201:
-                                        st.success("Account created successfully! You can now log in.")
-                                    else:
-                                        status.update(label="Registration failed.", state="error")
-                                        st.error(response.json().get("detail", "Registration failed."))
-                                except Exception as e:
-                                    status.update(label="Connection Error", state="error")
-                                    st.error(f"Something went wrong: {str(e)}")
+            #         if st.form_submit_button("Sign Up", type="primary", width='stretch'):
+            #             with st.status("Preparing registration...", expanded=True) as status:
+            #                 try:
+            #                     headers={"Accept": "application/json", "Content-Type": "application/json"}
+            #                     response = requests.post(REGISTER_URL, json={"username": new_username, "password": new_password}, timeout=3.0, headers=headers)
+            #                     if response.status_code == 201:
+            #                         st.success("Account created successfully! You can now log in.")
+            #                     else:
+            #                         status.update(label="Registration failed.", state="error")
+            #                         st.error(response.json().get("detail", "Registration failed."))
+            #                 except requests.exceptions.ReadTimeout:
+            #                     #handling cold start 
+            #                     try:
+            #                         # 1. Update the spinning status box text directly!
+            #                         status.update(label="Waking up Voxel's AI engines... (this takes ~45 seconds) ⏳", state="running")
+            #                         # 2. Keep your toast as a nice pop-up alert
+            #                         st.toast("⚠️ Server is waking up from sleep.", icon="⏳")
+            #                         headers={"Accept": "application/json", "Content-Type": "application/json"}
+            #                         response = requests.post(REGISTER_URL, json={"username": new_username, "password": new_password}, timeout=60, headers=headers)
+            #                         if response.status_code == 201:
+            #                             st.success("Account created successfully! You can now log in.")
+            #                         else:
+            #                             status.update(label="Registration failed.", state="error")
+            #                             st.error(response.json().get("detail", "Registration failed."))
+            #                     except Exception as e:
+            #                         status.update(label="Connection Error", state="error")
+            #                         st.error(f"Something went wrong: {str(e)}")
                                 
-                            except Exception as e:
-                                status.update(label="Connection Error", state="error")
-                                st.error(f"Something went wrong: {str(e)}")
+            #                 except Exception as e:
+            #                     status.update(label="Connection Error", state="error")
+            #                     st.error(f"Something went wrong: {str(e)}")
 
 # ==========================================
 # 📊 MAIN DASHBOARD (Logged In)
@@ -276,20 +287,37 @@ else:
     # ACCORDION 1: CONFIGURATIONS
     # ---------------------------------------------------------
     # expanded=False means it stays neatly closed until clicked
-        with st.expander("Configurations", expanded=False):
-            st.markdown("### System Status")
-            st.success("🟢 Database Connected")
-            st.info("🧠 LangGraph Memory: Active")
-            
-            st.divider()
-            st.markdown("### Active AI Agents")
-            st.caption("**Router:** `llama-3.1-8b-instant`")
-            st.caption("**SQL:** `gemini-3.1-pro`")
-            st.caption("**Analyst:** `llama-3.1-8b-instant`")
-            
-            st.divider()
-            st.markdown("### Agent Parameters")
-            creativity = st.slider("Analyst Creativity", 0.0, 1.0, 0.2, help="Lower = stricter math. Higher = narrative insights.")
+        if st.session_state.role == "admin":
+            with st.expander("Configurations", expanded=False):
+                new_db_url = st.text_input("New Database URL", type='password', placeholder="postgresql://user:password@host:port/dbname")
+                if st.button("Update Database Connection", use_container_width=True):
+                    if new_db_url:
+                        with st.spinner("Syncing schema to AI..."):
+                            try:
+                                resp = requests.put(f"{BASE_URL}/settings/database",
+                                                    json={"db_url": new_db_url},
+                                                    headers={"Authorization": f"Bearer {st.session_state.access_token}"})
+                                if resp.status_code == 200:
+                                    st.success("Schema synced! Datapilot is now ready")
+                                    time.sleep(1)
+                                    st.rerun()
+                                else:
+                                    st.error(f"Sync failed!: {resp.text}")
+                            except Exception as e:
+                                st.error(f"Connection error: {str(e)}")
+                                resp = None
+                    else:
+                        st.warning("Please enter a valid database URL.")
+                
+                st.divider()
+                st.markdown("### Active AI Agents")
+                st.caption("**Router:** `llama-3.1-8b-instant`")
+                st.caption("**SQL:** `gemini-3.1-pro`")
+                st.caption("**Analyst:** `llama-3.1-8b-instant`")
+                
+                st.divider()
+                st.markdown("### Agent Parameters")
+                creativity = st.slider("Analyst Creativity", 0.0, 1.0, 0.2, help="Lower = stricter math. Higher = narrative insights.")
         
             # ---------------------------------------------------------
 
@@ -452,33 +480,64 @@ else:
 
         # 2. Call the FastAPI Backend
         with st.chat_message("assistant"):
-            with st.spinner("Analyzing database schema and generating insights..."):
+            with st.status("Initializing query...", expanded=True) as status_ui:
                 try:
                     query_headers = {"Authorization": f"Bearer {st.session_state.access_token}"}
                     payload = {
                         "question": prompt,
                         "thread_id": st.session_state.thread_id
                     }
-                    response = requests.post(API_URL, json=payload, headers=query_headers)
+                    response = requests.post(API_URL, json=payload, headers=query_headers, stream=True)
                     
                     if response.status_code == 200:
-                        api_data = response.json()
-                        generated_sql = api_data.get("generated_sql", "-- SQL not found")
-                        sql_results = api_data.get("result", [])
-                        insight_text = api_data.get("result_summary", "No insights generated.")
-                        viz_config = api_data.get("viz_config",{})
-                        # Pre-build the DataFrame so we don't have to rebuild it on every Streamlit rerun
+                        final_data = None
+                        for line in response.iter_lines():
+                            if line:
+                                decoded_line = line.decode('utf-8')
+
+                                try:
+                                    chunk = json.loads(decoded_line)
+                                    if "status" in chunk:
+                                        status_ui.update(label=chunk["status"], state="running")
+                                    elif "error" in chunk:
+                                        status_ui.update(label="Error occurred", state="error")
+                                        st.error(chunk["error"])
+                                        break
+                                    else:
+                                        final_data = chunk  # This should be the final result with SQL, data, and insights
+                                        status_ui.update(label="Complete!", state="complete")
+                                except json.JSONDecodeError:
+                                    continue  # Ignore lines that aren't valid JSON
+                    if final_data:
+                        generated_sql = final_data.get("generated_sql", "-- SQL not found")
+                        sql_results = final_data.get("result", [])
+                        insight_text = final_data.get("result_summary", "No insights generated.")
                         df = pd.DataFrame(sql_results) if sql_results else None
-                        # Append the full payload to history
                         st.session_state.messages.append({
                             "role": "assistant",
                             "insight": insight_text,
                             "data": sql_results,
                             "df": df,
-                            "sql": generated_sql,
-                            "viz_config": viz_config
+                            "sql": generated_sql
                         })
                         st.rerun()
+                        # api_data = response.json()
+                        # generated_sql = api_data.get("generated_sql", "-- SQL not found")
+                        # sql_results = api_data.get("result", [])
+                        # insight_text = api_data.get("result_summary", "No insights generated.")
+                        # viz_config = api_data.get("viz_config",{})
+                        # Pre-build the DataFrame so we don't have to rebuild it on every Streamlit rerun
+                        # df = pd.DataFrame(sql_results) if sql_results else None
+                        # # Append the full payload to history
+                        # st.session_state.messages.append({
+                        #     "role": "assistant",
+                        #     "insight": insight_text,
+                        #     "data": sql_results,
+                        #     "df": df,
+                        #     "sql": generated_sql,
+                        #     "viz_config": viz_config
+                        # })
+                        # st.rerun()
                     elif response.status_code == 401:
                         st.error("Session expired. Please log in again.")
                         st.session_state.access_token = None

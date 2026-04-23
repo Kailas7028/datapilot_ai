@@ -1,23 +1,16 @@
 import hashlib
 import json
+import asyncio
 import time
-from typing import Iterator
-from psycopg2.extras import RealDictCursor
 from langchain_core.documents import Document
-from app.db import get_connection, release_connection
 from agent.summary_agent import SummaryAgent
-#from rag.chromadb_impl import ChromaDBWrapper
 from rag.pinecone_impl import PineconeWrapper
-from utils.loggers import get_logger
+from utils.loggers import get_logger, org_id_var, user_id_var
+from app.tenant_db import get_tenant_pool
 
-# Initialize Centralized Logger
 logger = get_logger(__name__)
 
-# ==========================================
-# HELPER: Data Drift Detector
-# ==========================================
 def generate_metadata_hash(table_description: str, columns: list) -> str:
-    """Generates a SHA256 hash capturing the full state of the table's metadata."""
     sorted_cols = sorted(columns, key=lambda x: x['name'])
     payload = {
         "description": table_description or "",
@@ -26,107 +19,69 @@ def generate_metadata_hash(table_description: str, columns: list) -> str:
     payload_string = json.dumps(payload, sort_keys=True).encode('utf-8')
     return hashlib.sha256(payload_string).hexdigest()
 
-
 class SchemaIndexer:
-    """Manages the extraction, summarization, and storage of database schemas."""
-    
     def __init__(self):
         self.summary_agent = SummaryAgent()
-        self.vector_db = PineconeWrapper()  # Switch to ChromaDBWrapper() for local testing
-        logger.info("SchemaIndexer initialized and connected to Vector DB.")
+        self.vector_db = PineconeWrapper()
+        logger.info("SchemaIndexer initialized.")
 
-    # def _createDocument(self, content: str, source: str, description: str = None, hashcode: str = None) -> Document:
-    #     """Helper method to create a LangChain Document with consistent metadata."""
-    #     return Document(
-    #         page_content=content, 
-    #         metadata={
-    #             "source": source, 
-    #             "description": description or "", 
-    #             "hashcode": hashcode or ""
-    #         }
-    #     )
-
-    def _createDocument(self,tid: str, summary: str, table_data: dict, hashcode: str) -> Document:
-        """Safely splits data between embedding vectors and metadata storage."""
-        
-        
-        
-        # 1. PAGE CONTENT: Strictly for the Embedding Model (Keep under 256 tokens)
-        # We only include the table name, description, and the LLM's semantic summary.
-        searchable_text = f"Table Name: {tid}\n"
-        searchable_text += f"Description: {table_data.get('table_description', 'None')}\n"
-        searchable_text += f"Summary: {summary}"
-
-        # 2. METADATA: The Payload for the SQL Agent (Unlimited size)
-        # We store the massive column definitions as a raw JSON string.
-        # The Vector DB will NOT embed this, it will just hand it back when the table is found.
+    def _createDocument(self, tid: str, summary: str, table_data: dict, hashcode: str) -> Document:
+        searchable_text = f"Table Name: {tid}\nDescription: {table_data.get('table_description', 'None')}\nSummary: {summary}"
         return Document(
             page_content=searchable_text, 
             metadata={
                 "source": tid, 
                 "hashcode": hashcode,
-                "schema_payload": json.dumps(table_data[tid].get("columns")) 
+                "schema_payload": json.dumps(table_data.get("columns", [])) 
             }
         )
 
-    def sync_schema_to_vectordb(self) -> Document:
-        """Fetches schema, checks for drift, summarizes via LLM, and streams results."""
-        logger.info("Starting schema extraction from PostgreSQL...")
+    async def sync_schema_to_vectordb(self, org_id: str, user_id: str = "system"):
+        # 1. SET CONTEXT FOR LOGS
+        org_id_var.set(org_id)
+        user_id_var.set(user_id)
         
-        # 1. DEFINE THE ADVANCED METADATA QUERY
+        logger.info(f"Starting schema extraction for {org_id}...")
+        
         sql_query = r"""
         SELECT 
             c.table_schema AS schema_name, 
             c.table_name, 
             c.column_name, 
             c.data_type,
-            -- Check if this column is a Primary Key
             CASE WHEN (
-                SELECT tc.constraint_type
-                FROM information_schema.key_column_usage kcu
-                JOIN information_schema.table_constraints tc
-                  ON kcu.constraint_name = tc.constraint_name
-                WHERE kcu.table_schema = c.table_schema
-                  AND kcu.table_name = c.table_name
-                  AND kcu.column_name = c.column_name
-                  AND tc.constraint_type = 'PRIMARY KEY'
-                LIMIT 1
+                SELECT tc.constraint_type FROM information_schema.key_column_usage kcu
+                JOIN information_schema.table_constraints tc ON kcu.constraint_name = tc.constraint_name
+                WHERE kcu.table_schema = c.table_schema AND kcu.table_name = c.table_name
+                AND kcu.column_name = c.column_name AND tc.constraint_type = 'PRIMARY KEY' LIMIT 1
             ) IS NOT NULL THEN TRUE ELSE FALSE END AS is_primary_key,
-            -- Check if this column is a Foreign Key, and get what it points to
             (
                 SELECT ccu.table_schema || '.' || ccu.table_name || '(' || ccu.column_name || ')'
                 FROM information_schema.key_column_usage kcu
-                JOIN information_schema.table_constraints tc
-                  ON kcu.constraint_name = tc.constraint_name
-                JOIN information_schema.constraint_column_usage ccu
-                  ON ccu.constraint_name = tc.constraint_name
-                WHERE kcu.table_schema = c.table_schema
-                  AND kcu.table_name = c.table_name
-                  AND kcu.column_name = c.column_name
-                  AND tc.constraint_type = 'FOREIGN KEY'
-                LIMIT 1
+                JOIN information_schema.table_constraints tc ON kcu.constraint_name = tc.constraint_name
+                JOIN information_schema.constraint_column_usage ccu ON ccu.constraint_name = tc.constraint_name
+                WHERE kcu.table_schema = c.table_schema AND kcu.table_name = c.table_name
+                AND kcu.column_name = c.column_name AND tc.constraint_type = 'FOREIGN KEY' LIMIT 1
             ) AS foreign_key_reference,
             obj_description((c.table_schema || '.' || c.table_name)::regclass, 'pg_class') AS table_description
         FROM information_schema.columns c
         WHERE c.table_schema = 'public'
         ORDER BY c.table_schema, c.table_name, c.ordinal_position;
         """
-        # 2. FETCH FROM DB
-        conn = None
+
+        # 2. FETCH FROM DB (Using ASYNCPG only)
         rows = []
         try:
-            conn = get_connection()
-            with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-                cursor.execute(sql_query)
-                rows = cursor.fetchall()
+            pool = await get_tenant_pool(org_id)
+            async with pool.acquire() as conn:
+                records = await conn.fetch(sql_query)
+                rows = [dict(record) for record in records]
         except Exception as e:
-            logger.error(f"FATAL: Database connection failed. Details: {e}")
-            return            
-        finally:
-            if conn:
-                release_connection(conn)
+            logger.error(f"Database connection failed: {e}")
+            return
+        # REMOVED: finally release_connection (handled by 'async with')
 
-        # 3. INITIALIZE AND POPULATE THE TABLES DICTIONARY
+        # 3. POPULATE TABLES
         tables = {}
         for row in rows:
             tid = f"{row['schema_name']}.{row['table_name']}"
@@ -137,58 +92,55 @@ class SchemaIndexer:
                     "table_description": row["table_description"] or "",
                     "columns": []
                 }
-            
-            col_def = {
+            tables[tid]["columns"].append({
                 "name": row["column_name"],
                 "type": row["data_type"],
                 "is_pk": row["is_primary_key"],
-                "fk_ref": row["foreign_key_reference"] # Will be None if it's not a Foreign Key
-            }
-            tables[tid]["columns"].append(col_def)
+                "fk_ref": row["foreign_key_reference"]
+            })
+        
+        # THE GHOST VECTOR PURGE 
+        try:
+            # 1. Get what SHOULD exist (from Postgres)
+            active_postgres_tables = set(tables.keys())
+            
+            # 2. Get what ACTUALLY exists (from Pinecone)
+            existing_pinecone_vectors = set(self.vector_db.get_all_ids(tenant_id=org_id))
+            
+            # 3. Find the Ghosts (In Pinecone, but no longer in Postgres)
+            ghost_vectors = existing_pinecone_vectors - active_postgres_tables
+            
+            if ghost_vectors:
+                logger.warning(f"Found {len(ghost_vectors)} ghost vectors for {org_id}. Purging: {ghost_vectors}")
+                # You already have the delete method in your base class! [cite: 353, 354]
+                self.vector_db.delete(doc_ids=list(ghost_vectors), tenant_id=org_id)
+            else:
+                logger.info("No ghost vectors found. Namespace is clean.")
+                
+        except Exception as e:
+            logger.error(f"Ghost vector purge failed for {org_id}: {e}")
+            
 
-        logger.info(f"Successfully extracted {len(tables)} tables. Starting ingestion.")
-
-        # 4. PROCESS, SUMMARIZE, AND SAVE
-        docs=[]
+        # 4. PROCESS AND UPSERT
+        docs = []
         for index, (tid, data) in enumerate(tables.items(), 1):
-            
-            # -> DATA DRIFT CHECK <-
             current_hash = generate_metadata_hash(data.get("table_description"), data["columns"])
-            existing_meta = self.vector_db.get_metadata_by_id(tid)
-            
-            # If the table exists and the columns/description haven't changed, skip it!
+            existing_meta = self.vector_db.get_metadata_by_id(tid, tenant_id=org_id)
+
             if existing_meta and existing_meta.get("hashcode") == current_hash:
-                logger.debug(f"[{index}/{len(tables)}] ⏭️ SKIP: {tid} (No schema changes detected)")
+                logger.debug(f"[{index}/{len(tables)}] ⏭️ SKIP: {tid}")
                 continue
 
-            logger.info(f"[{index}/{len(tables)}] 🤖 LLM: Generating summary for {tid}...")
+            logger.info(f"[{index}/{len(tables)}] 🤖 LLM Summary: {tid}...")
             try: 
-                # Call the LLM
                 summary_text = self.summary_agent.summarize_table(table_info=data)
+                doc = self._createDocument(tid=tid, summary=summary_text, table_data=data, hashcode=current_hash)
                 
-                # Build the Document
-                doc = self._createDocument(
-                    tid=tid,
-                    table_data=tables, 
-                    summary=summary_text, 
-                    hashcode=current_hash
-                )
-                
-                # THE SAVE STATE: Save to Vector DB immediately
-                self.vector_db.upsert([doc])
+                self.vector_db.upsert([doc], tenant_id=org_id)
                 docs.append(doc)
-            
-                # API Rate Limits
-                time.sleep(2.5) 
-         
-                
+                await asyncio.sleep(1.0) # Non-blocking sleep for async
             except Exception as e:
-                logger.error(f"[{index}/{len(tables)}] ❌ ERROR on {tid}: {e}")
-                continue
+                logger.error(f"Error on {tid}: {e}")
+                
+        logger.info(f"Indexing complete for {org_id}. {len(docs)} tables updated.")
         return docs
-
-
-if __name__ == "__main__":
-    dm = SchemaIndexer()
-    for doc in dm.sync_schema_to_vectordb():
-        print(f"ingested: {doc.metadata.get('source')} (hash={doc.metadata.get('hashcode')})")

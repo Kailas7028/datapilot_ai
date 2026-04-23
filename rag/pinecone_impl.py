@@ -5,6 +5,7 @@ from langchain_core.documents import Document
 from rag.basevectoredb import BaseVectorDB
 from utils.loggers import get_logger
 from dotenv import load_dotenv
+from langsmith import traceable
 
 load_dotenv()
 logger = get_logger(__name__)
@@ -45,10 +46,12 @@ class PineconeWrapper(BaseVectorDB):
             logger.error(f"Failed to connect to Pinecone: {e}")
             raise RuntimeError("Database connection failed") from e
         
-    def upsert(self, documents: List[Document]) -> bool:
+    def upsert(self, documents: List[Document], tenant_id: str) -> bool:
         """Uploads raw text directly. Pinecone handles the Llama embedding automatically."""
         if not documents:
             return None
+        if not tenant_id:
+            raise ValueError("Tenant ID is required for upsert operation.")
         try:
             records_to_upsert = []
 
@@ -67,17 +70,19 @@ class PineconeWrapper(BaseVectorDB):
                 records_to_upsert.append(record)
 
             # IMPORTANT: Use `upsert_records` instead of standard `upsert`
-            self.index.upsert_records(namespace="__default__", records=records_to_upsert)
+            self.index.upsert_records(namespace=tenant_id, records=records_to_upsert)
             logger.info(f"Successfully upserted {len(documents)} documents to Pinecone via Integrated Inference.")
             return True
         except Exception as e:
             logger.error(f"Failed to upsert data: {e}") 
             return False
             
-    def get_metadata_by_id(self, doc_id: str) -> Optional[Dict[str,Any]]:
+    def get_metadata_by_id(self, doc_id: str, tenant_id: str) -> Optional[Dict[str,Any]]:
         """Retrieves metadata."""
+        if not tenant_id:
+            raise ValueError("Tenant ID is required for fetching metadata.")
         try:
-            result = self.index.fetch(ids=[doc_id])
+            result = self.index.fetch(ids=[doc_id], namespace=tenant_id)
             if hasattr(result, 'vectors') and doc_id in result.vectors:
                 return result.vectors[doc_id].metadata
             return None
@@ -85,8 +90,11 @@ class PineconeWrapper(BaseVectorDB):
             logger.debug(f"Vector {doc_id} not found. Proceeding to embed.")
             return None
             
-    def search(self, query: str, limit: int = 5, metadata_filters: Optional[Dict[str,Any]] = None) -> List[Document]:
+    @traceable(name="pinecone_search")
+    def search(self, query: str, tenant_id: str, limit: int = 5, metadata_filters: Optional[Dict[str,Any]] = None ) -> List[Document]:
         """Searches Pinecone using raw text. Pinecone embeds the query automatically."""
+        if not tenant_id:
+            raise ValueError("Tenant ID is required for search operation.")
         try:
             # IMPORTANT: Use the `search` method (not query) for Integrated Inference
             search_query = {
@@ -99,7 +107,7 @@ class PineconeWrapper(BaseVectorDB):
 
             results = self.index.search(
                 query=search_query,
-                namespace="__default__"
+                namespace=tenant_id
             )
             
             # Safely extract hits from Pinecone's dictionary response
@@ -125,14 +133,34 @@ class PineconeWrapper(BaseVectorDB):
             logger.error(f"Failed for query : {query} : {e}")
             return []
             
-    def delete(self, doc_ids: List[str]) -> bool:
+    def delete(self, doc_ids: List[str], tenant_id: str) -> bool:
         """Removes documents from Pinecone."""
         if not doc_ids:
             return True
+        if not tenant_id:
+            raise ValueError("Tenant ID is required for delete operation.")
         try:
-            self.index.delete(ids=doc_ids)
+            self.index.delete(ids=doc_ids, namespace=tenant_id)
             logger.info(f"Deleted {len(doc_ids)} documents.")
             return True
         except Exception as e:
             logger.error(f"Deletion Failed : {e}")
             return False
+
+#--------------------------------------------------------------------------------------------
+#---fetch ids for specific tenant 
+def get_all_ids(self, tenant_id: str) -> List[str]:
+        """Fetches all document IDs currently stored in the tenant's namespace."""
+        if not tenant_id:
+            raise ValueError("Tenant ID is required to list vectors.")
+        
+        try:
+            # Pinecone's list() returns a generator of pagination objects
+            vector_ids = []
+            for id_chunk in self.index.list(namespace=tenant_id):
+                vector_ids.extend(id_chunk)
+                
+            return vector_ids
+        except Exception as e:
+            logger.error(f"Failed to list vector IDs for {tenant_id}: {e}")
+            return []

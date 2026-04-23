@@ -1,22 +1,52 @@
 from langgraph.graph import StateGraph, START, END
 from agent.state import AgentState
-from agent.nodes import sql_generation_node, sql_validation_node, sql_execution_node, retriever_node, result_summarization_node, visualization_recommender_node, chat_node, router_master
+from agent.nodes import (sql_generation_node,
+                         sql_validation_node,
+                         sql_execution_node,
+                         retriever_node,
+                         result_summarization_node,
+                         visualization_recommender_node,
+                         chat_node,
+                         router_master,
+                         retry_node
+                            )
 from langgraph.checkpoint.memory import MemorySaver
 
-#should call sunnary agent
-def should_call(state: AgentState) -> bool:
-    """
-    Node to determine if we should call the summary agent based on the result length
-    """
-    if state.get('result') and len(state['result']) > 100:  # Arbitrary length threshold
-        return "end_workflow"
-    return "summary_agent"
 
-#routing function
-def route_query(state:AgentState) -> str:
-    if str(state.get("router_decision")) == "chat":
-        return "chat_node"
-    return "retriever"
+# Condtional function to decide graph flow
+def master_router(state: AgentState) -> str:
+    router_decision = state.get("router_decision")
+    if router_decision == 'chat':
+        return 'chat'
+    elif router_decision == 'analytics':
+        return 'analytics'
+    else:
+        return 'analytics'  # default to retriever if no decision or unrecognized decision
+    
+
+# Post router after sql validation
+# 2. Validation Router (CRITICAL FIX)
+def post_validation_router(state: AgentState) -> str:
+    if state.get("error"):
+        if state.get("retries", 0) < 2:
+            return 'retry_node'
+        return END  # Out of retries, end the flow safely
+    return 'sql_execution'
+    
+# conditions after sql execution route to summary or not and route to retry or not
+def post_execution_router(state: AgentState) -> str:
+    if state.get("error"):
+        if state.get("retries", 0) < 2:  # Retry up to 3 times
+            return 'retry_node'
+        else:
+            return END
+    elif state.get("result"):
+        if len(state.get("result")) > 100:  # Example condition: if result is too long
+            return END
+        else:
+            return 'summary_agent'
+    else:
+        return END  # If no result and no error, end the flow
 
 
 # Define the graph structure
@@ -31,34 +61,44 @@ workflow.add_node("summary_agent", result_summarization_node)
 workflow.add_node("viz_node",visualization_recommender_node)
 workflow.add_node("chat_node",chat_node)
 workflow.add_node("router",router_master)
-# workflow.add_node("retry", retry_node)
+workflow.add_node("retry_node", retry_node)  # Reuse SQL generation node for retries
 
-# Your edges remain exactly the same
-workflow.set_entry_point("router")
+
+# Design the graph flow
+workflow.set_entry_point('router')
 workflow.add_conditional_edges(
-    "router",
-    route_query,
+    'router',
+    master_router,
     {
-        "chat_node": "chat_node",
-        "retriever" : "retriever"
+        'chat': 'chat_node',
+        'analytics': 'retriever'
+    }
+
+)
+workflow.add_edge('chat_node', END)  # End after chat response
+workflow.add_edge('retriever', 'sql_generation')
+workflow.add_edge('sql_generation', 'sql_validation')
+workflow.add_conditional_edges(
+    'sql_validation',
+    post_validation_router,
+    {
+        'sql_execution': 'sql_execution',
+        'retry_node': 'retry_node',
+        END: END
     }
 )
-workflow.add_edge("chat_node", END)
-workflow.add_edge("retriever", "sql_generation")
-workflow.add_edge("sql_generation", "sql_validation")
-workflow.add_edge("sql_validation","sql_execution")
 
 workflow.add_conditional_edges(
-    "sql_execution",
-    should_call,
+    'sql_execution',
+    post_execution_router,
     {
-        "summary_agent": "summary_agent",
-        "end_workflow" : END
+        'retry_node': 'retry_node',
+        'summary_agent': 'summary_agent',
+        END: END
     }
-    )
-workflow.add_edge("summary_agent", END)
-# workflow.add_edge("summary_agent", "viz_node")
-# workflow.add_edge("viz_node",END)
+)
+workflow.add_edge('retry_node', 'sql_validation')  # After retrying, go back to validation
+workflow.add_edge('summary_agent', END)  # End after summarization
 
 memory = MemorySaver()
 

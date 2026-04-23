@@ -1,4 +1,4 @@
-from langchain_core.prompts import ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate
+from langchain_core.prompts import ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate, MessagesPlaceholder
 
 #==========================================
 # Prompts for SQL generation 
@@ -44,10 +44,12 @@ REASONING CONTROL:
 - Do NOT output or simulate reasoning
 - Do NOT explore multiple approaches
 - Generate final SQL directly
+- If the user's request is a follow-up, use the context from the previous messages to resolve ambiguous references (like "them", "it", or "previous").
 """
 
 FEW_SHOT_COT_PROMPT = ChatPromptTemplate.from_messages([
     SystemMessagePromptTemplate.from_template(SQL_GENERATION_SYSTEM),
+    MessagesPlaceholder(variable_name="chat_history"),
     HumanMessagePromptTemplate.from_template("""
 <postgresql_ddl>
 {schema}
@@ -206,4 +208,33 @@ ROUTER_PROMPT = ChatPromptTemplate.from_messages([
                                              {question}
                                              ,question>
                                              """)
+])
+
+#==========================================================
+# Prompt for retrying SQL generation with error feedback
+#==========================================================
+SQL_RETRY_PROMPT_TEMPLATE = """You are an expert PostgreSQL developer. The SQL you generated previously resulted in this error when executed.
+</error>
+ {error_message}
+</error>
+for the user's question:
+</question>
+{question}
+</question>
+Review the error message and revise your SQL to fix the issue. Follow these rules:
+- Output ONLY the corrected SQL, no explanations or comments.
+- Ensure the SQL adheres to the original generation rules (read-only, use only provided schema, etc.)
+- If the error indicates a syntax issue, carefully check your SQL syntax.
+- If the error indicates a missing column or table, check the schema and adjust your SQL to use only available tables/columns.
+- If the error indicates a type mismatch, ensure your SQL is using compatible data types.
+- Do NOT try to fix the error by making assumptions about missing schema elements. Only use the provided schema.
+- If the error is due to an empty result set, consider if your WHERE clause is too restrictive and adjust accordingly, but do not remove necessary filters.
+- If the error is due to a timeout or performance issue, consider if your SQL can be simplified or if you can reduce the number of joins, but do not remove necessary data relationships.
+"""
+
+SQL_RETRY_PROMPT = ChatPromptTemplate.from_messages([
+    SystemMessagePromptTemplate.from_template(SQL_RETRY_PROMPT_TEMPLATE),
+    HumanMessagePromptTemplate.from_template("""<postgresql_ddl>
+{schema}
+</postgresql_ddl>""")
 ])
