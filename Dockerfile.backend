@@ -1,5 +1,5 @@
-# 1. Start with a lightweight version of Python 3.10
-FROM python:3.10-slim
+# 1. Start with a lightweight version of Python 3.14
+FROM python:3.14-slim
 
 # 2. Set the working directory inside the container
 WORKDIR /app
