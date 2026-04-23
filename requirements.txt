@@ -447,3 +447,5 @@ zipp==3.23.1
     # via importlib-metadata
 zstandard==0.25.0
     # via langsmith
+slowapi==0.1.9
+    # via fastapi

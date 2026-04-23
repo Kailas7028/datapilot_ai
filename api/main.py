@@ -11,6 +11,11 @@ from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.responses import StreamingResponse
 from cryptography.fernet import Fernet
 from dotenv import load_dotenv
+#rate limiting
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 
 # Import auth functions
 from api.auth import (
@@ -43,6 +48,13 @@ async def lifespan(app: FastAPI):
     logger.info("Voxel Backend Shutdown: Pools closed.")
 
 app = FastAPI(title="Voxel Multi-Tenant API", lifespan=lifespan)
+
+# --- RATE LIMITER SETUP ---
+limiter = Limiter(key_func=get_remote_address, default_limits=["1000/hour"])
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
+#------------------------------
 
 # --- 2. RESTORED MIDDLEWARE (Observability & Tracking) ---
 @app.middleware("http")
@@ -132,6 +144,7 @@ async def provision_new_tenant(user: UserCreate, is_admin: bool = Depends(verify
 #--------------------------------------------------------------------------------------
 # --- 4. AUTH & SETTINGS ---
 @app.post("/api/v1/login")
+@limiter.limit("5/minute")  # Limit login attempts to prevent brute-force attacks
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
     user = await get_user_from_db(form_data.username )
     if not user or not verify_password(form_data.password, user["hashed_password"]):
@@ -147,6 +160,7 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
 #-------------------------------------------------------------------------------------------
 # Update Tenant Database URL (Authenticated Endpoint)
 @app.put("/api/v1/settings/database")
+@limiter.limit("5/hour")  # Limit to prevent abuse
 async def update_tenant_database(payload: DatabaseUpdateRequest, user: dict = Depends(require_admin)):
     org_id = user.get("org_id")
     MASTER_KEY = os.getenv("MASTER_ENCRYPTION_KEY")
@@ -188,6 +202,7 @@ async def update_tenant_database(payload: DatabaseUpdateRequest, user: dict = De
 #--------------------------------------------------------------------------------------
 # --- 5. QUERY ENDPOINT ---
 @app.post("/api/v1/query")
+@limiter.limit("10/minute")  # Limit query requests to prevent abuse
 async def ask_database(payload: QueryRequest, user: dict = Depends(get_current_user)):
     org_id = user.get("org_id")
     user_id = user.get("user_id")
