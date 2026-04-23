@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from passlib.context import CryptContext
+import bcrypt
 
 # Import your async central pool
 import app.central_db as central_db
@@ -30,11 +31,11 @@ class UserCreate(BaseModel):
 # --- HELPER FUNCTIONS ---
 def get_password_hash(password):
     pre_hashed = hashlib.sha256(password.encode('utf-8')).hexdigest()
-    return pwd_context.hash(pre_hashed)
+    return bcrypt.hash(pre_hashed)
 
 def verify_password(plain_password, hashed_password):
     pre_hashed = hashlib.sha256(plain_password.encode('utf-8')).hexdigest()
-    return pwd_context.verify(pre_hashed, hashed_password)
+    return bcrypt.checkpw(pre_hashed, hashed_password)
 #------------------------------------------------------------------
 def create_access_token(data: dict, expires_delta: timedelta = None):
     to_encode = data.copy()
