@@ -33,56 +33,53 @@ async def sql_generation_node(state: AgentState) -> AgentState:
     Node for generating SQL from the question and schema prompt
     """
     try:
+        
         logger.info(f"Generating SQL for the question: {state.get('question','')}")
         history = state.get("messages", [])[:-1]  # Get all messages except the latest one which is the current question
         response = await gemini3_engine.agenerate(prompt_template=FEW_SHOT_COT_PROMPT,schema = state.get("retrieved_docs",[]),question = state.get("question",""), chat_history=history)
-        input_tokens=response.usage_metadata.get("input_tokens", 0)
-        output_tokens=response.usage_metadata.get("output_tokens", 0)
-
-        # Count Total Tokens for one question-answer cycle (for cost estimation and monitoring)
+        
+        # Calculate tokens
+        input_tokens = response.usage_metadata.get("input_tokens", 0)
+        output_tokens = response.usage_metadata.get("output_tokens", 0)
         input_tokens = state.get("input_tokens", 0) + input_tokens
         output_tokens = state.get("output_tokens", 0) + output_tokens
 
-        # # 3. Clean the output 
-        # raw_output = response.content
-
-        # #check does llm returned list of blocks
-        # if isinstance(raw_output, list):
-        #     raw_sql = raw_output[0].get("text", "")
-        # else:
-        #     raw_sql = raw_output.strip()
-        
-        # Safely strip markdown if the LLM disobeys the prompt
+        # Clean output
         final_sql = extract_pure_sql(response.content)
         
-        # 4. Return the cleaned SQL back to the graph state
-        
         logger.info(f"Generated SQL: {final_sql}")
-        logger.info(f"SQL generation completed. Input tokens: {input_tokens}, Output tokens: {output_tokens}")
-
         return {"generated_sql": final_sql, "input_tokens": input_tokens, "output_tokens": output_tokens}
     
-    # Handle specific API errors that indicate the primary LLM is unavailable and route to fallback
-    except (exceptions.ServiceUnavailableError, exceptions.Resourceexhausted) as api_error:
-        logger.error(f"Routing to fallback mistral llm due to : {str(api_error)}")
-        try:
-            response = await fallback_provider.agenerate(prompt_template=FEW_SHOT_COT_PROMPT,schema = state.get("retrieved_docs",[]),question = state.get("question",""), chat_history=history)
-            input_tokens=response.usage_metadata.get("input_tokens", 0)
-            output_tokens=response.usage_metadata.get("output_tokens", 0)
-            # Safely strip markdown if the LLM disobeys the prompt
-            final_sql = extract_pure_sql(response.content)
-            logger.info(f"Generated SQL: {final_sql}")
-            logger.info(f"SQL generation completed. Input tokens: {input_tokens}, Output tokens: {output_tokens}")
+    except Exception as e:
+        error_msg = str(e).upper()
+        
+        # THE TRAFFIC COP: Only trigger fallback for Quota/Demand errors
+        if "429" in error_msg or "RESOURCE_EXHAUSTED" in error_msg or "503" in error_msg or "UNAVAILABLE" in error_msg:
+            logger.warning(f"Primary model unavailable (Quota/Demand). Routing to Mistral fallback. Detail: {str(e)}")
+            
+            try:
+                # Same generation logic, just using fallback_provider
+                response = await fallback_provider.agenerate(prompt_template=FEW_SHOT_COT_PROMPT,schema = state.get("retrieved_docs",[]),question = state.get("question",""), chat_history=history)
+                
+                # Token count for fallback
+                input_tokens = response.usage_metadata.get("input_tokens", 0)
+                output_tokens = response.usage_metadata.get("output_tokens", 0)
+                input_tokens = state.get("input_tokens", 0) + input_tokens
+                output_tokens = state.get("output_tokens", 0) + output_tokens
 
-            return {"generated_sql": final_sql, "input_tokens": input_tokens, "output_tokens": output_tokens}
-        except Exception as fallback_error:
-            logger.error(f"Error in fallback provider: {str(fallback_error)}")
-
-        return {"generated_sql": None, "input_tokens": 0, "output_tokens": 0, "error": f"API error: {str(api_error)}"}
-
-    except Exception as e:  
-        logger.error(f"Error occurred during SQL generation: {str(e)}")
-        return {"generated_sql": None, "input_tokens": 0, "output_tokens": 0, "error": str(e)}
+                final_sql = extract_pure_sql(response.content)
+                
+                logger.info(f"Fallback Generated SQL: {final_sql}")
+                return {"generated_sql": final_sql, "input_tokens": input_tokens, "output_tokens": output_tokens}
+                
+            except Exception as fallback_error:
+                logger.error(f"Error in fallback provider: {str(fallback_error)}")
+                return {"generated_sql": None, "input_tokens": 0, "output_tokens": 0, "error": f"Fallback API error: {str(fallback_error)}"}
+        
+        # IF IT IS ANY OTHER ERROR: Don't route. Log it and return None so you can debug.
+        else:
+            logger.error(f"Critical error occurred during SQL generation (Not API limit related): {str(e)}")
+            return {"generated_sql": None, "input_tokens": 0, "output_tokens": 0, "error": str(e)}
 #sql validation node
 #---------------------------------------------------------
 def sql_validation_node(state: AgentState) -> AgentState:
@@ -133,7 +130,7 @@ async def retry_node(state: AgentState) -> AgentState:
             retries_count = state.get("retries", 0) + 1
             logger.info(f"Retrying due to error: {error}")
             # Clear the error and relevant fields to trigger a retry in the graph
-            retry_result = await gemini3_engine.agenerate(prompt_template=SQL_RETRY_PROMPT, error_message=error, question=state.get("question", ""), schema=state.get("retrieved_docs", []))
+            retry_result = await fallback_provider.agenerate(prompt_template=SQL_RETRY_PROMPT, error_message=error, question=state.get("question", ""), schema=state.get("retrieved_docs", []))
             # Count Total Tokens for one question-answer cycle (for cost estimation and monitoring)
             new_in_tokens = retry_result.usage_metadata.get("input_tokens", 0)
             new_out_tokens = retry_result.usage_metadata.get("output_tokens", 0)
@@ -239,6 +236,11 @@ async def result_summarization_node(state: AgentState) -> AgentState:
     Node for summarizing the SQL results into a human-readable answer
     """
     logger.info("Summarizing SQL results into a human-readable answer.")
+    raw_result = state.get("result", [])
+    result_str = str(raw_result)
+    if len(result_str) > 15000:  # If the result is too long, we can truncate it or just pass a sample to the LLM to avoid token overload
+        logger.info("Result is too long, truncating for summarization.")
+        result_str = result_str[:15000]  # Keep only the first 15000 characters for summarization
     try:
         # THE FIX: Add default=str to safely cast Decimals, Dates, and UUIDs to strings
         safe_json = json.dumps(state.get("result",""), default=str)

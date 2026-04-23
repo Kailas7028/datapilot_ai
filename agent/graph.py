@@ -35,18 +35,14 @@ def post_validation_router(state: AgentState) -> str:
     
 # conditions after sql execution route to summary or not and route to retry or not
 def post_execution_router(state: AgentState) -> str:
+    # 1. If there is an error, handle the retry loop
     if state.get("error"):
-        if state.get("retries", 0) < 2:  # Retry up to 3 times
+        if state.get("retries", 0) < 2:  # Retry up to 2 times
             return 'retry_node'
-        else:
-            return END
-    elif state.get("result"):
-        if len(state.get("result")) > 100:  # Example condition: if result is too long
-            return END
-        else:
-            return 'summary_agent'
-    else:
-        return END  # If no result and no error, end the flow
+        return END  # Out of retries, kill the flow
+        
+    # 2. If execution was successful (no error), ALWAYS route to summary.
+    return 'summary_agent'
 
 
 # Define the graph structure

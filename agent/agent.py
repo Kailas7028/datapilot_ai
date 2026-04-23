@@ -45,7 +45,7 @@ async def run_agent(question: str, thread_id: str, org_id: str, user_id: str) :
                 else:
                     yield json.dumps({"status": "Formulating response..."}) + "\n"
             elif node_name == "retriever":
-                yield json.dumps({"status": "Generating SQL query..."}) + "\n"
+                yield json.dumps({"status": "Generating SQL, might take a moment..."}) + "\n"
             elif node_name == "sql_generation":
                 yield json.dumps({"status": "Validating SQL query..."}) + "\n"
             elif node_name == "sql_validation":

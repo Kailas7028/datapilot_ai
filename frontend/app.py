@@ -508,19 +508,19 @@ else:
                                         status_ui.update(label="Complete!", state="complete")
                                 except json.JSONDecodeError:
                                     continue  # Ignore lines that aren't valid JSON
-                    if final_data:
-                        generated_sql = final_data.get("generated_sql", "-- SQL not found")
-                        sql_results = final_data.get("result", [])
-                        insight_text = final_data.get("result_summary", "No insights generated.")
-                        df = pd.DataFrame(sql_results) if sql_results else None
-                        st.session_state.messages.append({
-                            "role": "assistant",
-                            "insight": insight_text,
-                            "data": sql_results,
-                            "df": df,
-                            "sql": generated_sql
-                        })
-                        st.rerun()
+                        if final_data:
+                            generated_sql = final_data.get("generated_sql", "-- SQL not found")
+                            sql_results = final_data.get("result", [])
+                            insight_text = final_data.get("result_summary", "No insights generated.")
+                            df = pd.DataFrame(sql_results) if sql_results else None
+                            st.session_state.messages.append({
+                                "role": "assistant",
+                                "insight": insight_text,
+                                "data": sql_results,
+                                "df": df,
+                                "sql": generated_sql
+                            })
+                            st.rerun()
                         # api_data = response.json()
                         # generated_sql = api_data.get("generated_sql", "-- SQL not found")
                         # sql_results = api_data.get("result", [])

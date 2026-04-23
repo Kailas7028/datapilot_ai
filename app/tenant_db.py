@@ -53,7 +53,8 @@ async def get_tenant_pool(org_id: str):
         new_pool = await asyncpg.create_pool(
             dsn=raw_db_url,
             min_size=1, 
-            max_size=5
+            max_size=5,
+            statement_cache_size=0
         )
         
         tenant_pools[org_id] = {

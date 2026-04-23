@@ -128,7 +128,7 @@ class Gemini3PreviewProvider(BaseLLM):
 class FallbackProvider(BaseLLM):
     def __init__(self):
         self.fallback_llm = ChatMistralAI(
-            model = "mistral-7b-instant-v0.1",  # A smaller, open-source model for fallback scenarios
+            model = "open-mixtral-8x7b",  # A smaller, open-source model for fallback scenarios
             temperature=0.0,
             max_output_tokens=4096,
             api_key=os.getenv("MISTRAL_API_KEY")
