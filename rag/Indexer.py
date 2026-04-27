@@ -7,6 +7,7 @@ from agent.summary_agent import SummaryAgent
 from rag.pinecone_impl import PineconeWrapper
 from utils.loggers import get_logger, org_id_var, user_id_var
 from app.tenant_db import get_tenant_pool
+from utils.utils import chunk_dictionary
 
 logger = get_logger(__name__)
 
@@ -122,25 +123,42 @@ class SchemaIndexer:
             
 
         # 4. PROCESS AND UPSERT
-        docs = []
-        for index, (tid, data) in enumerate(tables.items(), 1):
-            current_hash = generate_metadata_hash(data.get("table_description"), data["columns"])
-            existing_meta = self.vector_db.get_metadata_by_id(tid, tenant_id=org_id)
+        BATCH_SIZE = 100
+        total_tables = len(tables)
+        processed_count = 0
+        docs_upserted_total = 0
+        for chunk in chunk_dictionary(tables, BATCH_SIZE):
+            batch_tids = list(chunk.keys())
+            logger.info(f"Processing batch of {len(batch_tids)} tables: {batch_tids[0]} to {batch_tids[-1]} (Total: {total_tables})")
+            existing_metadata = self.vector_db.get_bulk_metadata(doc_ids=batch_tids, tenant_id=org_id)
 
-            if existing_meta and existing_meta.get("hashcode") == current_hash:
-                logger.debug(f"[{index}/{len(tables)}] ⏭️ SKIP: {tid}")
-                continue
+            batch_docs_to_upsert = []
 
-            logger.info(f"[{index}/{len(tables)}] 🤖 LLM Summary: {tid}...")
-            try: 
-                summary_text = self.summary_agent.summarize_table(table_info=data)
-                doc = self._createDocument(tid=tid, summary=summary_text, table_data=data, hashcode=current_hash)
-                
-                self.vector_db.upsert([doc], tenant_id=org_id)
-                docs.append(doc)
-                await asyncio.sleep(1.0) # Non-blocking sleep for async
-            except Exception as e:
-                logger.error(f"Error on {tid}: {e}")
-                
-        logger.info(f"Indexing complete for {org_id}. {len(docs)} tables updated.")
-        return docs
+            for tid,table_data in chunk.items():
+                processed_count += 1
+                current_hash = generate_metadata_hash(table_data.get("table_description"), table_data["columns"])
+                existing_meta = existing_metadata.get(tid)
+                if existing_meta and existing_meta.get("hashcode") == current_hash:
+                    logger.debug(f"⏭️ SKIP: {tid} (No changes detected)")
+                    continue
+
+                logger.info(f"{processed_count}/{total_tables} -LLM Summary: {tid}...")
+
+                try: 
+                    summary_text = self.summary_agent.summarize_table(table_info=table_data)
+                    doc = self._createDocument(tid=tid, summary=summary_text, table_data=table_data, hashcode=current_hash)
+                    batch_docs_to_upsert.append(doc)
+                    await asyncio.sleep(0.5) # Non-blocking sleep for async
+                except Exception as e:
+                    logger.error(f"Error summarizing {tid}: {e}")
+
+            if batch_docs_to_upsert:
+                try:
+                    self.vector_db.upsert(batch_docs_to_upsert, tenant_id=org_id)
+                    docs_upserted_total += len(batch_docs_to_upsert)
+                    logger.info(f"Upserted {len(batch_docs_to_upsert)} documents for {org_id} (Total upserted so far: {docs_upserted_total})")
+                except Exception as e:
+                    logger.error(f"Batch upsert failed for {org_id}: {e}")
+
+        logger.info(f"Indexing complete for {org_id}. Total tables processed: {processed_count}. Total documents upserted: {docs_upserted_total}.")
+        return docs_upserted_total
