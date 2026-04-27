@@ -30,6 +30,7 @@ class PineconeWrapper(BaseVectorDB):
         self.connect()
         self.__class__._is_initialized = True
 
+    #-- PINECONE INTEGRATED INFERENCE METHODS --
     def connect(self) -> None:
         """Establishes connection to Pinecone Cloud."""
         try:
@@ -46,6 +47,8 @@ class PineconeWrapper(BaseVectorDB):
             logger.error(f"Failed to connect to Pinecone: {e}")
             raise RuntimeError("Database connection failed") from e
         
+
+    #-- Upser to Pinecone using raw text (Pinecone handles embedding) --    
     def upsert(self, documents: List[Document], tenant_id: str) -> bool:
         """Uploads raw text directly. Pinecone handles the Llama embedding automatically."""
         if not documents:
@@ -77,26 +80,14 @@ class PineconeWrapper(BaseVectorDB):
             logger.error(f"Failed to upsert data: {e}") 
             return False
             
-    def get_metadata_by_id(self, doc_id: str, tenant_id: str) -> Optional[Dict[str,Any]]:
-        """Retrieves metadata."""
-        if not tenant_id:
-            raise ValueError("Tenant ID is required for fetching metadata.")
-        try:
-            result = self.index.fetch(ids=[doc_id], namespace=tenant_id)
-            if hasattr(result, 'vectors') and doc_id in result.vectors:
-                return result.vectors[doc_id].metadata
-            return None
-        except Exception as e:
-            logger.debug(f"Vector {doc_id} not found. Proceeding to embed.")
-            return None
-            
+    # -- Search Pinecone using raw text query (Pinecone handles embedding) --        
     @traceable(name="pinecone_search")
     def search(self, query: str, tenant_id: str, limit: int = 5, metadata_filters: Optional[Dict[str,Any]] = None ) -> List[Document]:
         """Searches Pinecone using raw text. Pinecone embeds the query automatically."""
         if not tenant_id:
             raise ValueError("Tenant ID is required for search operation.")
         try:
-            # IMPORTANT: Use the `search` method (not query) for Integrated Inference
+            # Construct the search query with the raw text and optional metadata filters
             search_query = {
                 "inputs": {"text": query},
                 "top_k": limit
@@ -132,7 +123,8 @@ class PineconeWrapper(BaseVectorDB):
         except Exception as e:
             logger.error(f"Failed for query : {query} : {e}")
             return []
-            
+        
+    #-- Delete documents from Pinecone --        
     def delete(self, doc_ids: List[str], tenant_id: str) -> bool:
         """Removes documents from Pinecone."""
         if not doc_ids:
@@ -147,20 +139,57 @@ class PineconeWrapper(BaseVectorDB):
             logger.error(f"Deletion Failed : {e}")
             return False
 
-#--------------------------------------------------------------------------------------------
-#---fetch ids for specific tenant 
-def get_all_ids(self, tenant_id: str) -> List[str]:
-        """Fetches all document IDs currently stored in the tenant's namespace."""
+    #---fetch ids for specific tenant 
+    def get_all_ids(self, tenant_id: str) -> List[str]:
+            """Fetches all document IDs currently stored in the tenant's namespace."""
+            if not tenant_id:
+                raise ValueError("Tenant ID is required to list vectors.")
+            
+            try:
+                # Pinecone's list() returns a generator of pagination objects
+                vector_ids = []
+                for id_chunk in self.index.list(namespace=tenant_id):
+                    vector_ids.extend(id_chunk)
+                    
+                return vector_ids
+            except Exception as e:
+                logger.error(f"Failed to list vector IDs for {tenant_id}: {e}")
+                return []
+            
+            
+    #-- Fetch metadata for a single document ID --
+    def get_metadata_by_id(self, doc_id: str, tenant_id: str) -> Optional[Dict[str,Any]]:
+        """Retrieves metadata."""
         if not tenant_id:
-            raise ValueError("Tenant ID is required to list vectors.")
-        
+            raise ValueError("Tenant ID is required for fetching metadata.")
         try:
-            # Pinecone's list() returns a generator of pagination objects
-            vector_ids = []
-            for id_chunk in self.index.list(namespace=tenant_id):
-                vector_ids.extend(id_chunk)
-                
-            return vector_ids
+            result = self.index.fetch(ids=[doc_id], namespace=tenant_id)
+            if hasattr(result, 'vectors') and doc_id in result.vectors:
+                return result.vectors[doc_id].metadata
+            return None
         except Exception as e:
-            logger.error(f"Failed to list vector IDs for {tenant_id}: {e}")
-            return []
+            logger.debug(f"Vector {doc_id} not found. Proceeding to embed.")
+            return None
+        
+    #-- Fetch metadata for multiple document IDs in bulk --        
+    def get_bulk_metadata(self, doc_ids: List[str], tenant_id: str) -> Dict[str, dict]:
+        """Fetches metadata for multiple documents in a single API call."""
+        if not tenant_id:
+            raise ValueError("Tenant ID is required for fetching metadata.")
+        if not doc_ids:
+            return {}
+            
+        try:
+            # Pinecone fetch allows up to 1000 IDs per request. 
+            # If you expect more than 1000 tables, you would chunk the doc_ids list here.
+            result = self.index.fetch(ids=doc_ids, namespace=tenant_id)
+            
+            bulk_meta = {}
+            if hasattr(result, 'vectors'):
+                for v_id, vector_data in result.vectors.items():
+                    bulk_meta[v_id] = vector_data.metadata
+            return bulk_meta
+            
+        except Exception as e:
+            logger.error(f"Bulk metadata fetch failed: {e}")
+            return {}
