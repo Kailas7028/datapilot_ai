@@ -1,7 +1,6 @@
 # llm/llm_provider.py
 from langchain_groq import ChatGroq
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import AIMessageChunk
 from llm.base import BaseLLM
 import config
@@ -105,7 +104,7 @@ class Gemini3PreviewProvider(BaseLLM):
         self.llm = ChatGoogleGenerativeAI(
             model=model_name,
             temperature=temperature,
-            max_output_tokens=8192,
+            max_tokens=8192,
             api_key=os.getenv("GOOGLE_API_KEY")
         )
 
@@ -130,7 +129,7 @@ class FallbackProvider(BaseLLM):
         self.fallback_llm = ChatMistralAI(
             model = "open-mixtral-8x7b",  # A smaller, open-source model for fallback scenarios
             temperature=0.0,
-            max_output_tokens=4096,
+            max_tokens=4096,
             api_key=os.getenv("MISTRAL_API_KEY")
         )
     def generate(self, prompt_template, **kwargs) -> AIMessageChunk:

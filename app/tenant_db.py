@@ -62,6 +62,7 @@ async def get_tenant_pool(org_id: str):
             "last_accessed": current_time
         }
         
+        
         return new_pool
     except Exception as e:
         logger.error(f"Failed to build async tenant pool for {org_id}: {e}")

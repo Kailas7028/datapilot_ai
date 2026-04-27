@@ -20,7 +20,7 @@ async def init_central_pool():
         central_pool = await asyncpg.create_pool(
             dsn=DATABASE_URL,
             min_size=1,
-            max_size=20,
+            max_size=5,
             statement_cache_size=0  # Disable asyncpg's internal statement caching 
         )
         logger.info("Central DB async connection pool created successfully.")

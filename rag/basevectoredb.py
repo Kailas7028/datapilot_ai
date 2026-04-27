@@ -66,3 +66,13 @@ class BaseVectorDB(ABC):
             bool: True if deletion was successful.
         """
         pass
+    @abstractmethod
+    def get_all_ids(self, tenant_id: str) -> List[str]:
+        """Fetches all document IDs currently stored in the tenant's namespace.
+
+        Args:
+            tenant_id (str): The tenant ID whose document IDs to fetch.
+        Returns:
+            List[str]: A list of document IDs.
+        """
+        pass
