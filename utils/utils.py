@@ -23,3 +23,15 @@ def extract_pure_sql(raw_llm_output: str) -> str:
     # 4. Strip extra whitespace and newlines
     return clean_sql.strip()
 
+
+
+#=======================================================================================
+# Utility function to chunk large dictionaries into smaller pieces for batch processing
+#=======================================================================================
+from itertools import islice
+
+def chunk_dictionary(data_dict, chunk_size):
+    """Yields successive chunks from a dictionary."""
+    it = iter(data_dict)
+    for i in range(0, len(data_dict), chunk_size):
+        yield {k: data_dict[k] for k in islice(it, chunk_size)}
