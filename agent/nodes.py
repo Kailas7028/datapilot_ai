@@ -237,19 +237,32 @@ async def result_summarization_node(state: AgentState) -> AgentState:
     """
     logger.info("Summarizing SQL results into a human-readable answer.")
     raw_result = state.get("result", [])
-    result_str = str(raw_result)
-    if len(result_str) > 15000:  # If the result is too long, we can truncate it or just pass a sample to the LLM to avoid token overload
-        logger.info("Result is too long, truncating for summarization.")
-        result_str = result_str[:15000]  # Keep only the first 15000 characters for summarization
+    
+    # 1. Truncate by ROWS (list slicing) instead of characters
+    if len(raw_result) > 50: 
+        logger.info(f"Result has {len(raw_result)} rows. Truncating to 50 for LLM context.")
+        sample_result = raw_result[:50] 
+    else:
+        sample_result = raw_result
+        
     try:
-        # THE FIX: Add default=str to safely cast Decimals, Dates, and UUIDs to strings
-        safe_json = json.dumps(state.get("result",""), default=str)
-        response = await groq_engine.agenerate(prompt_template=DATA_INSIGHT_PROMPT, sql_result=safe_json, sql_query=state.get("generated_sql", ""), question=state.get("question", ""))
+        # 2. Dump the cleanly sliced list into a proper JSON array format
+        safe_json = json.dumps(sample_result, default=str)
+        
+        response = await groq_engine.agenerate(
+            prompt_template=DATA_INSIGHT_PROMPT, 
+            sql_result=safe_json, 
+            sql_query=state.get("generated_sql", ""), 
+            question=state.get("question", "")
+        )
         summary = response.content.strip()
+        
         # 3. Create the AI memory block
         ai_memory = f"Previously generated SQL:\n{state.get('generated_sql', '')}\n\nSummary:\n{summary}"
         logger.info("Result summarization successful.")
+        
         return {"result_summary": summary, "error": None, "messages": [AIMessage(content=ai_memory)]}
+        
     except Exception as e:
         logger.error(f"Error occurred during result summarization: {str(e)}")
         return {"result_summary": None, "error": str(e), "messages": []}
