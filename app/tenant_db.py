@@ -12,6 +12,8 @@ load_dotenv()
 
 # Global Cache: { "org_123": {"pool": asyncpg.Pool, "last_accessed": 1690000000} }
 tenant_pools = {} 
+# hold locks for each org_id to prevent thundering herd on cache miss
+pool_lock = {}
 
 ENCRYPTION_KEY = os.getenv("MASTER_ENCRYPTION_KEY")
 if not ENCRYPTION_KEY:
@@ -28,45 +30,58 @@ async def get_tenant_pool(org_id: str):
     if org_id in tenant_pools:
         tenant_pools[org_id]["last_accessed"] = current_time
         return tenant_pools[org_id]["pool"]
-        
+    
     # CACHE MISS
     logger.info(f"Cache miss. Building new async connection pool for org: {org_id}")
     
-    # Grab a connection from the central pool to fetch the URL
-    async with central_db.central_pool.acquire() as central_conn:
-        # asyncpg uses $1 instead of %s for parameters
-        row = await central_conn.fetchrow(
-            "SELECT encrypted_db_url FROM voxel_admin.tenant_databases WHERE org_id = $1", 
-            org_id
-        )
+    # Ensure only one coroutine builds the pool for a given org_id at a time
+    if org_id not in pool_lock:
+        pool_lock[org_id] = asyncio.Lock()
+
+    async with pool_lock[org_id]:
+         # Double-check if another coroutine built the pool while we were waiting for the lock
+        if org_id in tenant_pools:
+            tenant_pools[org_id]["last_accessed"] = current_time
+            return tenant_pools[org_id]["pool"]
         
-    if not row or not row['encrypted_db_url']:
-        raise ValueError(f"No database configured for organization {org_id}")
+        logger.info(f"Building async connection pool for org: {org_id} after acquiring lock.")
         
-    encrypted_url = row['encrypted_db_url']
     
-    # AES-256 Decryption in RAM
-    raw_db_url = cipher_suite.decrypt(encrypted_url.encode()).decode()
-    
-    # Build the async pool for this specific client
-    try:
-        new_pool = await asyncpg.create_pool(
-            dsn=raw_db_url,
-            min_size=1, 
-            max_size=5,
-            statement_cache_size=0
-        )
+        # Grab a connection from the central pool to fetch the URL
+        async with central_db.central_pool.acquire() as central_conn:
+            # asyncpg uses $1 instead of %s for parameters
+            row = await central_conn.fetchrow(
+                "SELECT encrypted_db_url FROM voxel_admin.tenant_databases WHERE org_id = $1", 
+                org_id
+            )
+            
+        if not row or not row['encrypted_db_url']:
+            raise ValueError(f"No database configured for organization {org_id}")
+            
+        encrypted_url = row['encrypted_db_url']
         
-        tenant_pools[org_id] = {
-            "pool": new_pool,
-            "last_accessed": current_time
-        }
+        # AES-256 Decryption in RAM
+        raw_db_url = cipher_suite.decrypt(encrypted_url.encode()).decode()
         
-        
-        return new_pool
-    except Exception as e:
-        logger.error(f"Failed to build async tenant pool for {org_id}: {e}")
-        raise e
+        # Build the async pool for this specific client
+        try:
+            new_pool = await asyncpg.create_pool(
+                dsn=raw_db_url,
+                min_size=1, 
+                max_size=5,
+                statement_cache_size=0
+            )
+            
+            tenant_pools[org_id] = {
+                "pool": new_pool,
+                "last_accessed": current_time
+            }
+            
+            
+            return new_pool
+        except Exception as e:
+            logger.error(f"Failed to build async tenant pool for {org_id}: {e}")
+            raise e
 
 # --- THE TTL SWEEPER ---
 
@@ -87,5 +102,9 @@ async def sweep_idle_pools(idle_timeout_seconds=1800):
                 pool_to_close = tenant_pools[org_id]["pool"]
                 await pool_to_close.close()
                 del tenant_pools[org_id]
+
+                if org_id in pool_lock:
+                    del pool_lock[org_id]
+                    
             except Exception as e:
                 logger.error(f"Error sweeping pool for org {org_id}: {e}")
