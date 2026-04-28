@@ -145,7 +145,7 @@ class SchemaIndexer:
                 logger.info(f"{processed_count}/{total_tables} -LLM Summary: {tid}...")
 
                 try: 
-                    summary_text = self.summary_agent.summarize_table(table_info=table_data)
+                    summary_text = await self.summary_agent.summarize_table(table_info=table_data)
                     doc = self._createDocument(tid=tid, summary=summary_text, table_data=table_data, hashcode=current_hash)
                     batch_docs_to_upsert.append(doc)
                     await asyncio.sleep(0.5) # Non-blocking sleep for async

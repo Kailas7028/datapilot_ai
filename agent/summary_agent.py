@@ -7,9 +7,9 @@ class SummaryAgent:
         self.llm = GroqLlamaProvider()
         self.template = SUMMARY_PROMPT_TEMPLATE
 
-    def summarize_table(self, table_info) -> str:
+    async def summarize_table(self, table_info) -> str:
         try:
-            summary =  self.llm.generate(self.template,table_info=table_info)
+            summary =  await self.llm.agenerate(self.template,table_info=table_info)
             return summary.content
         except Exception as e:
             raise RuntimeError(f"Error in summary agent") from e
