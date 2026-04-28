@@ -10,6 +10,8 @@ async def execute_sql(sql: str, org_id: str) -> list:
     # Get the async pool for this specific organization
     pool = await get_tenant_pool(org_id)
 
+    safe_sql = f"SELECT * FROM ({sql}) AS subquery LIMIT 500"  # Wrap in subquery to enforce limit
+
     try:
         logger.info(f"Executing SQL for org {org_id}: {sql}")
         
@@ -20,7 +22,7 @@ async def execute_sql(sql: str, org_id: str) -> list:
             async with conn.transaction(readonly=True):
                 
                 # 3. Fetch data directly. asyncpg returns a list of Record objects.
-                records = await conn.fetch(sql)
+                records = await conn.fetch(safe_sql)
                 
                 # 4. Convert Records to standard dicts for Streamlit/Pandas compatibility
                 result = [dict(record) for record in records]
