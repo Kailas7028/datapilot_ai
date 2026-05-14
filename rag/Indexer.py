@@ -106,7 +106,7 @@ class SchemaIndexer:
             active_postgres_tables = set(tables.keys())
             
             # 2. Get what ACTUALLY exists (from Pinecone)
-            existing_pinecone_vectors = set(self.vector_db.get_all_ids(tenant_id=org_id))
+            existing_pinecone_vectors = set(await asyncio.to_thread(self.vector_db.get_all_ids, tenant_id=org_id))
             
             # 3. Find the Ghosts (In Pinecone, but no longer in Postgres)
             ghost_vectors = existing_pinecone_vectors - active_postgres_tables
@@ -114,7 +114,7 @@ class SchemaIndexer:
             if ghost_vectors:
                 logger.warning(f"Found {len(ghost_vectors)} ghost vectors for {org_id}. Purging: {ghost_vectors}")
                 # You already have the delete method in your base class! [cite: 353, 354]
-                self.vector_db.delete(doc_ids=list(ghost_vectors), tenant_id=org_id)
+                await asyncio.to_thread(self.vector_db.delete, doc_ids=list(ghost_vectors), tenant_id=org_id)
             else:
                 logger.info("No ghost vectors found. Namespace is clean.")
                 
@@ -130,7 +130,7 @@ class SchemaIndexer:
         for chunk in chunk_dictionary(tables, BATCH_SIZE):
             batch_tids = list(chunk.keys())
             logger.info(f"Processing batch of {len(batch_tids)} tables: {batch_tids[0]} to {batch_tids[-1]} (Total: {total_tables})")
-            existing_metadata = self.vector_db.get_bulk_metadata(doc_ids=batch_tids, tenant_id=org_id)
+            existing_metadata = await asyncio.to_thread(self.vector_db.get_bulk_metadata, doc_ids=batch_tids, tenant_id=org_id)
 
             batch_docs_to_upsert = []
 
@@ -154,7 +154,7 @@ class SchemaIndexer:
 
             if batch_docs_to_upsert:
                 try:
-                    self.vector_db.upsert(batch_docs_to_upsert, tenant_id=org_id)
+                    await asyncio.to_thread(self.vector_db.upsert, batch_docs_to_upsert, tenant_id=org_id)
                     docs_upserted_total += len(batch_docs_to_upsert)
                     logger.info(f"Upserted {len(batch_docs_to_upsert)} documents for {org_id} (Total upserted so far: {docs_upserted_total})")
                 except Exception as e:

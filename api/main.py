@@ -147,7 +147,10 @@ async def provision_new_tenant(user: UserCreate, is_admin: bool = Depends(verify
 @limiter.limit("5/minute")  # Limit login attempts to prevent brute-force attacks
 async def login_for_access_token(request: Request, form_data: OAuth2PasswordRequestForm = Depends()):
     user = await get_user_from_db(form_data.username )
-    if not user or not verify_password(form_data.password, user["hashed_password"]):
+    is_valid = False
+    if user:
+        is_valid = await asyncio.to_thread(verify_password, form_data.password, user["hashed_password"])
+    if not user or not is_valid:
         raise HTTPException(status_code=401, detail="Incorrect username or password")
     user_id_var.set(user["id"])
     org_id_var.set(user["org_id"])

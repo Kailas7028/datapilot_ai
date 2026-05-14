@@ -1,5 +1,8 @@
 #clean raw SQL output from LLM (remove markdown formatting, extra whitespace, etc.)
 import re
+import decimal
+from datetime import date, datetime
+import uuid
 
 def extract_pure_sql(raw_llm_output: str) -> str:
     """Removes SQL comments and markdown, returning only the executable code."""
@@ -35,3 +38,20 @@ def chunk_dictionary(data_dict, chunk_size):
     it = iter(data_dict)
     for i in range(0, len(data_dict), chunk_size):
         yield {k: data_dict[k] for k in islice(it, chunk_size)}
+
+#=================================================================================
+#DB result sanitization
+#=================================================================================
+def sanitize_record(record_dict: dict) -> dict:
+    """Recursively converts PostgreSQL specific types to JSON-safe Python types."""
+    for key, value in record_dict.items():
+        if isinstance(value, decimal.Decimal):
+            # Convert decimals to float so Pandas and JSON can read them
+            record_dict[key] = float(value)
+        elif isinstance(value, (date, datetime)):
+            # Convert dates to string format (YYYY-MM-DD)
+            record_dict[key] = value.isoformat()
+        elif isinstance(value, uuid.UUID):
+            # Convert UUID objects to strings
+            record_dict[key] = str(value)
+    return record_dict

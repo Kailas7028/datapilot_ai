@@ -1,5 +1,6 @@
 from app.tenant_db import get_tenant_pool
 from utils.loggers import get_logger
+from utils.utils import sanitize_record
 
 logger = get_logger(__name__)
 
@@ -9,8 +10,8 @@ async def execute_sql(sql: str, org_id: str) -> list:
     """
     # Get the async pool for this specific organization
     pool = await get_tenant_pool(org_id)
-
-    safe_sql = f"SELECT * FROM ({sql}) AS subquery LIMIT 500"  # Wrap in subquery to enforce limit
+    sql = sql.rstrip(";")
+    safe_sql = f'SELECT * FROM ({sql}) AS subquery LIMIT 500'  # Wrap in subquery to enforce limit
 
     try:
         logger.info(f"Executing SQL for org {org_id}: {sql}")
@@ -25,7 +26,7 @@ async def execute_sql(sql: str, org_id: str) -> list:
                 records = await conn.fetch(safe_sql)
                 
                 # 4. Convert Records to standard dicts for Streamlit/Pandas compatibility
-                result = [dict(record) for record in records]
+                result = [sanitize_record(dict(record)) for record in records]
                 
         return result
         

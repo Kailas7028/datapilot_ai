@@ -1,5 +1,6 @@
 """ Agent nodes for handling different stages of the SQL generation and execution process """
 #sql generation node
+import asyncio
 from urllib import response
 
 from llm.prompts import FEW_SHOT_COT_PROMPT, DATA_INSIGHT_PROMPT, VIZ_SYSTEM_PROMPT, ROUTER_PROMPT, SQL_RETRY_PROMPT
@@ -162,7 +163,7 @@ async def retry_node(state: AgentState) -> AgentState:
 # Retriever Node (for fetching relevant documents from the vector store based on the question)
 #------------------------------------------------------------------------------------------
 
-def retriever_node(state: AgentState) -> dict:
+async def retriever_node(state: AgentState) -> dict:
     """
     Node for retrieving relevant documents from the vector store based on the question
     """
@@ -174,7 +175,7 @@ def retriever_node(state: AgentState) -> dict:
             raise ValueError("Organization ID is required for retrieval.")
         
         # Pinecone fetches up to 5 tables
-        results = retriever.search(query=state.get("question"), limit=5, tenant_id=org_id)
+        results = await asyncio.to_thread(retriever.search, query=state.get("question"), limit=5, tenant_id=org_id)
     
         if not results:
             logger.info("No results found!")
